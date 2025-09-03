@@ -1,0 +1,27 @@
+cat > .gitignore <<'EOF'
+# dependencies
+node_modules
+bun.lockb
+
+# builds
+dist
+build
+.out
+.next
+.vercel
+.netlify
+
+# tools & caches
+.vscode
+.DS_Store
+*.log
+coverage
+.cache
+parcel-cache
+.turbo
+.eslintcache
+
+# env
+.env
+*.local
+EOF
