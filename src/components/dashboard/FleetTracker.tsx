@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SimpleFleetMap } from './SimpleFleetMap';
+import { FleetMap } from './FleetMap';
 import { FleetOverviewPanel } from './FleetOverviewPanel';
 import { ControlPanel } from './ControlPanel';
 import { VehicleDetailsDrawer } from './VehicleDetailsDrawer';
@@ -49,7 +49,7 @@ export function FleetTracker() {
     <div className="relative w-full h-screen overflow-hidden">
       {/* Full-screen map background */}
             {/* Map Background */}
-      <SimpleFleetMap
+      <FleetMap
         vehicles={vehicles}
         onVehicleClick={setSelectedVehicle}
         selectedVehicle={selectedVehicle}
