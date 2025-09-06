@@ -251,7 +251,11 @@ export function VehiclesTab() {
         </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredVehicles.map((vehicle) => (
-            <VehicleCard key={vehicle.id} vehicle={vehicle} />
+            <VehicleCard 
+              key={vehicle.id} 
+              vehicle={vehicle} 
+              onVehicleUpdate={loadVehicles}
+            />
           ))}
         </div>
         {filteredVehicles.length === 0 && (

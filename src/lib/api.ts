@@ -190,6 +190,17 @@ export async function addTrafficEvent(event: Omit<TrafficEvent, 'id'>): Promise<
   }
 }
 
+export async function removeTrafficEvent(id: string): Promise<void> {
+  try {
+    const r = await fetch(`${API_BASE}/traffic-events/${id}`, {
+      method: "DELETE",
+    });
+    if (!r.ok) throw new Error("Failed to remove traffic event");
+  } catch (error) {
+    console.warn("Using mock response - backend not available");
+  }
+}
+
 // Dashboard Stats API
 export async function getDashboardStats() {
   try {

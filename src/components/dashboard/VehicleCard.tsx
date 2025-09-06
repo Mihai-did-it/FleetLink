@@ -1,8 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Truck, MapPin, Clock, Package, MoreHorizontal } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Truck, MapPin, Clock, Package, MoreHorizontal, Navigation, Pause, AlertTriangle, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { updateVehicleStatus, assignRoute } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 interface VehicleCardProps {
   vehicle: {
@@ -15,6 +18,7 @@ interface VehicleCardProps {
     packages: number;
     eta: string;
   };
+  onVehicleUpdate?: () => void;
 }
 
 const statusConfig = {
@@ -36,8 +40,45 @@ const statusConfig = {
   }
 };
 
-export function VehicleCard({ vehicle }: VehicleCardProps) {
+export function VehicleCard({ vehicle, onVehicleUpdate }: VehicleCardProps) {
   const status = statusConfig[vehicle.status];
+  const { toast } = useToast();
+  
+  const handleStatusUpdate = async (newStatus: typeof vehicle.status) => {
+    try {
+      await updateVehicleStatus(vehicle.id, newStatus);
+      toast({
+        title: "Status Updated",
+        description: `${vehicle.id} status changed to ${newStatus}`,
+      });
+      onVehicleUpdate?.();
+    } catch (error) {
+      console.error("Failed to update vehicle status:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update vehicle status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAssignRoute = async () => {
+    try {
+      await assignRoute(vehicle.id, "Optimized route assigned");
+      toast({
+        title: "Route Assigned",
+        description: `New route assigned to ${vehicle.id}`,
+      });
+      onVehicleUpdate?.();
+    } catch (error) {
+      console.error("Failed to assign route:", error);
+      toast({
+        title: "Error",
+        description: "Failed to assign route",
+        variant: "destructive",
+      });
+    }
+  };
   
   return (
     <Card className="hover:shadow-md transition-shadow duration-200">
@@ -52,9 +93,31 @@ export function VehicleCard({ vehicle }: VehicleCardProps) {
           <Badge className={cn("text-xs", status.color)}>
             {status.label}
           </Badge>
-          <Button variant="ghost" size="sm">
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleAssignRoute}>
+                <Navigation className="h-4 w-4 mr-2" />
+                Assign Route
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleStatusUpdate("active")}>
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Set Active
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleStatusUpdate("idle")}>
+                <Pause className="h-4 w-4 mr-2" />
+                Set Idle
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleStatusUpdate("warning")}>
+                <AlertTriangle className="h-4 w-4 mr-2" />
+                Mark as Warning
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </CardHeader>
       <CardContent>

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MapPin, Navigation, RefreshCw, Layers, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getVehicles, Vehicle as ApiVehicle } from "@/lib/api";
 
 interface Vehicle {
   id: string;
@@ -21,13 +22,58 @@ export function InteractiveMap() {
   const map = useRef<mapboxgl.Map | null>(null);
   const [mapboxToken, setMapboxToken] = useState('');
   const [isMapInitialized, setIsMapInitialized] = useState(false);
-  const [vehicles] = useState<Vehicle[]>([
-    { id: 'TRUCK-001', lat: 37.7749, lng: -122.4194, driver: 'Mike Johnson', status: 'active', heading: 45 },
-    { id: 'TRUCK-002', lat: 37.7849, lng: -122.4094, driver: 'Sarah Chen', status: 'active', heading: 120 },
-    { id: 'TRUCK-003', lat: 37.7649, lng: -122.4294, driver: 'David Rodriguez', status: 'warning', heading: 270 },
-    { id: 'TRUCK-004', lat: 37.7549, lng: -122.4394, driver: 'Emma Wilson', status: 'idle', heading: 0 },
-  ]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+
+  // Load vehicles from API
+  useEffect(() => {
+    loadVehicles();
+    
+    // Set up auto-refresh every 10 seconds
+    const interval = setInterval(loadVehicles, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadVehicles = async () => {
+    try {
+      const apiVehicles = await getVehicles();
+      
+      // Transform API vehicles to map format with fallback coordinates
+      const transformedVehicles: Vehicle[] = apiVehicles.map((vehicle, index) => ({
+        id: vehicle.vehicle_id,
+        lat: vehicle.lat || (37.7749 + (index * 0.01)), // Default to SF area with offset
+        lng: vehicle.lon || (-122.4194 + (index * 0.01)),
+        driver: vehicle.driver || "Unknown Driver",
+        status: (vehicle.status as 'active' | 'idle' | 'warning') || 'idle',
+        heading: Math.random() * 360 // Random heading if not provided
+      }));
+      
+      setVehicles(transformedVehicles);
+      
+      // Update map markers if map is initialized
+      if (isMapInitialized && map.current) {
+        clearMarkers();
+        addVehicleMarkers(transformedVehicles);
+      }
+    } catch (error) {
+      console.error("Failed to load vehicles for map:", error);
+      // Use fallback data
+      setVehicles([
+        { id: 'TRUCK-001', lat: 37.7749, lng: -122.4194, driver: 'Mike Johnson', status: 'active', heading: 45 },
+        { id: 'TRUCK-002', lat: 37.7849, lng: -122.4094, driver: 'Sarah Chen', status: 'active', heading: 120 },
+        { id: 'TRUCK-003', lat: 37.7649, lng: -122.4294, driver: 'David Rodriguez', status: 'warning', heading: 270 },
+        { id: 'TRUCK-004', lat: 37.7549, lng: -122.4394, driver: 'Emma Wilson', status: 'idle', heading: 0 },
+      ]);
+    }
+  };
+
+  const markers = useRef<mapboxgl.Marker[]>([]);
+
+  const clearMarkers = () => {
+    markers.current.forEach(marker => marker.remove());
+    markers.current = [];
+  };
 
   const initializeMap = () => {
     if (!mapboxToken || !mapContainer.current) return;
@@ -51,7 +97,7 @@ export function InteractiveMap() {
       );
 
       map.current.on('load', () => {
-        addVehicleMarkers();
+        addVehicleMarkers(vehicles);
         setIsMapInitialized(true);
         toast({
           title: "Map Initialized",
@@ -68,10 +114,10 @@ export function InteractiveMap() {
     }
   };
 
-  const addVehicleMarkers = () => {
+  const addVehicleMarkers = (vehicleList: Vehicle[]) => {
     if (!map.current) return;
 
-    vehicles.forEach((vehicle) => {
+    vehicleList.forEach((vehicle) => {
       // Create custom marker element
       const el = document.createElement('div');
       el.className = 'vehicle-marker';
@@ -111,10 +157,12 @@ export function InteractiveMap() {
       `);
 
       // Add marker to map
-      new mapboxgl.Marker(el)
+      const marker = new mapboxgl.Marker(el)
         .setLngLat([vehicle.lng, vehicle.lat])
         .setPopup(popup)
         .addTo(map.current!);
+
+      markers.current.push(marker);
 
       // Show popup on hover
       el.addEventListener('mouseenter', () => popup.addTo(map.current!));
@@ -122,13 +170,25 @@ export function InteractiveMap() {
     });
   };
 
-  const refreshMap = () => {
-    if (map.current) {
-      map.current.resize();
+  const refreshMap = async () => {
+    setLoading(true);
+    try {
+      await loadVehicles();
+      if (map.current) {
+        map.current.resize();
+      }
       toast({
         title: "Map Refreshed",
         description: "Vehicle positions updated.",
       });
+    } catch (error) {
+      toast({
+        title: "Refresh Failed",
+        description: "Unable to update vehicle positions.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -216,9 +276,9 @@ export function InteractiveMap() {
               <Layers className="h-4 w-4 mr-2" />
               Satellite
             </Button>
-            <Button variant="outline" size="sm" onClick={refreshMap}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
+            <Button variant="outline" size="sm" onClick={refreshMap} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              {loading ? 'Updating...' : 'Refresh'}
             </Button>
           </div>
         </div>

@@ -1,32 +1,59 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Truck, Package, Clock, MapPin } from "lucide-react";
+import { useState, useEffect } from "react";
+import { getDashboardStats } from "@/lib/api";
 
 export function StatsOverview() {
-  const stats = [
+  const [stats, setStats] = useState({
+    activeVehicles: 0,
+    totalVehicles: 0,
+    deliveriesToday: 0,
+    completedDeliveries: 0,
+    avgDeliveryTime: 0,
+    coveragePercentage: 0
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    try {
+      const statsData = await getDashboardStats();
+      setStats(statsData);
+    } catch (error) {
+      console.error("Failed to load dashboard stats:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const displayStats = [
     {
       title: "Active Vehicles",
-      value: "8",
-      subtitle: "of 10 total",
+      value: loading ? "..." : stats.activeVehicles.toString(),
+      subtitle: `of ${stats.totalVehicles} total`,
       icon: Truck,
       trend: "+2 from yesterday"
     },
     {
       title: "Deliveries Today",
-      value: "47",
-      subtitle: "12 completed",
+      value: loading ? "..." : stats.deliveriesToday.toString(),
+      subtitle: `${stats.completedDeliveries} completed`,
       icon: Package,
-      trend: "35 remaining"
+      trend: `${stats.deliveriesToday - stats.completedDeliveries} remaining`
     },
     {
       title: "Avg. Delivery Time",
-      value: "24m",
+      value: loading ? "..." : `${stats.avgDeliveryTime}m`,
       subtitle: "5m faster",
       icon: Clock,
       trend: "than yesterday"
     },
     {
       title: "Coverage Area",
-      value: "85%",
+      value: loading ? "..." : `${stats.coveragePercentage}%`,
       subtitle: "city coverage",
       icon: MapPin,
       trend: "optimal routes"
@@ -35,7 +62,7 @@ export function StatsOverview() {
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      {stats.map((stat, index) => (
+      {displayStats.map((stat, index) => (
         <Card key={index}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
