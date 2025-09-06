@@ -125,3 +125,662 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+import { VehicleCard } from "./VehicleCard";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Filter, Search, Plus, Truck } from "lucide-react";
+import { useState, useEffect } from "react";
+import { apiService, Vehicle } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
+
+export function VehiclesTab() {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [newVehicle, setNewVehicle] = useState({
+    driver: "",
+    location: "",
+    nextStop: "",
+    packages: 0,
+    eta: "",
+  });
+  const { toast } = useToast();
+
+  useEffect(() => {
+    loadVehicles();
+  }, []);
+
+  const loadVehicles = async () => {
+    setLoading(true);
+    try {
+      const vehiclesData = await apiService.getVehicles();
+      setVehicles(vehiclesData);
+    } catch (error) {
+      // Fallback to mock data if API fails
+      setVehicles([
+        {
+          id: "TRUCK-001",
+          driver: "Mike Johnson",
+          status: "active" as const,
+          location: "Downtown District",
+          speed: 35,
+          nextStop: "Westfield Mall",
+          packages: 8,
+          eta: "2:45 PM"
+        },
+        {
+          id: "TRUCK-002", 
+          driver: "Sarah Chen",
+          status: "active" as const,
+          location: "Industrial Zone",
+          speed: 28,
+          nextStop: "Tech Campus",
+          packages: 12,
+          eta: "3:15 PM"
+        },
+        {
+          id: "TRUCK-003",
+          driver: "David Rodriguez",
+          status: "warning" as const,
+          location: "Highway 101",
+          speed: 15,
+          nextStop: "City Center",
+          packages: 6,
+          eta: "4:20 PM"
+        },
+        {
+          id: "TRUCK-004",
+          driver: "Emma Wilson",
+          status: "idle" as const,
+          location: "Depot",
+          speed: 0,
+          nextStop: "Awaiting Assignment",
+          packages: 0,
+          eta: "--"
+        }
+      ]);
+      
+      toast({
+        title: "Info",
+        description: "Using demo data - connect to backend for real-time data",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addVehicle = async () => {
+    if (!newVehicle.driver || !newVehicle.location) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const vehicleData = {
+        ...newVehicle,
+        status: "idle" as const,
+        speed: 0,
+      };
+      
+      const addedVehicle = await apiService.addVehicle(vehicleData);
+      setVehicles(prev => [...prev, addedVehicle]);
+      setShowAddDialog(false);
+      setNewVehicle({
+        driver: "",
+        location: "",
+        nextStop: "",
+        packages: 0,
+        eta: "",
+      });
+      
+      toast({
+        title: "Vehicle Added",
+        description: `Vehicle assigned to ${addedVehicle.driver} has been added to the fleet.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add vehicle",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const filteredVehicles = vehicles.filter(vehicle => {
+    const matchesSearch = vehicle.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         vehicle.driver.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === "all" || vehicle.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Vehicle Management Header */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Truck className="h-5 w-5" />
+            <span>Fleet Management</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search vehicles or drivers..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full md:w-48">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Vehicles</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="idle">Idle</SelectItem>
+                <SelectItem value="warning">Warning</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Vehicle
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Add New Vehicle</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="driver" className="text-right">
+                      Driver
+                    </Label>
+                    <Input
+                      id="driver"
+                      value={newVehicle.driver}
+                      onChange={(e) => setNewVehicle(prev => ({ ...prev, driver: e.target.value }))}
+                      className="col-span-3"
+                      placeholder="Driver name"
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="location" className="text-right">
+                      Location
+                    </Label>
+                    <Input
+                      id="location"
+                      value={newVehicle.location}
+                      onChange={(e) => setNewVehicle(prev => ({ ...prev, location: e.target.value }))}
+                      className="col-span-3"
+                      placeholder="Current location"
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="nextStop" className="text-right">
+                      Next Stop
+                    </Label>
+                    <Input
+                      id="nextStop"
+                      value={newVehicle.nextStop}
+                      onChange={(e) => setNewVehicle(prev => ({ ...prev, nextStop: e.target.value }))}
+                      className="col-span-3"
+                      placeholder="Next destination"
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="packages" className="text-right">
+                      Packages
+                    </Label>
+                    <Input
+                      id="packages"
+                      type="number"
+                      value={newVehicle.packages}
+                      onChange={(e) => setNewVehicle(prev => ({ ...prev, packages: parseInt(e.target.value) || 0 }))}
+                      className="col-span-3"
+                      placeholder="Number of packages"
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="eta" className="text-right">
+                      ETA
+                    </Label>
+                    <Input
+                      id="eta"
+                      value={newVehicle.eta}
+                      onChange={(e) => setNewVehicle(prev => ({ ...prev, eta: e.target.value }))}
+                      className="col-span-3"
+                      placeholder="Estimated arrival time"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={addVehicle} disabled={loading}>
+                    {loading ? "Adding..." : "Add Vehicle"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Vehicle Grid */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">
+            Fleet Status ({filteredVehicles.length} of {vehicles.length})
+          </h3>
+        </div>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredVehicles.map((vehicle) => (
+            <VehicleCard key={vehicle.id} vehicle={vehicle} />
+          ))}
+        </div>
+        {filteredVehicles.length === 0 && (
+          <Card>
+            <CardContent className="flex items-center justify-center py-12">
+              <div className="text-center space-y-2">
+                <Truck className="h-12 w-12 text-muted-foreground mx-auto" />
+                <p className="text-muted-foreground">No vehicles found matching your criteria</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Play, Pause, Square, Plus, AlertTriangle, Car, Clock } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiService, Driver, TrafficEvent } from "@/lib/api";
+
+export function SimulationControls() {
+  const [isSimulationRunning, setIsSimulationRunning] = useState(false);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [trafficEvents, setTrafficEvents] = useState<TrafficEvent[]>([]);
+  const [newDriverName, setNewDriverName] = useState("");
+  const [newVehicleType, setNewVehicleType] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  // Load initial data
+  useEffect(() => {
+    loadDrivers();
+    loadTrafficEvents();
+  }, []);
+
+  const loadDrivers = async () => {
+    try {
+      const driversData = await apiService.getDrivers();
+      setDrivers(driversData);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load drivers",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const loadTrafficEvents = async () => {
+    try {
+      const eventsData = await apiService.getTrafficEvents();
+      setTrafficEvents(eventsData);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load traffic events",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const startSimulation = async () => {
+    setLoading(true);
+    try {
+      const response = await apiService.startSimulation();
+      setIsSimulationRunning(true);
+      toast({
+        title: "Simulation Started",
+        description: response.message || "Fleet simulation is now running with live updates.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to start simulation",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const pauseSimulation = async () => {
+    setLoading(true);
+    try {
+      const response = await apiService.pauseSimulation();
+      setIsSimulationRunning(false);
+      toast({
+        title: "Simulation Paused",
+        description: response.message || "Fleet simulation has been paused.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to pause simulation",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const stopSimulation = async () => {
+    setLoading(true);
+    try {
+      const response = await apiService.stopSimulation();
+      setIsSimulationRunning(false);
+      toast({
+        title: "Simulation Stopped",
+        description: response.message || "Fleet simulation has been stopped and reset.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to stop simulation",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addDriver = async () => {
+    if (!newDriverName.trim() || !newVehicleType) {
+      toast({
+        title: "Error",
+        description: "Please fill in all driver details",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const newDriver = await apiService.addDriver({
+        name: newDriverName,
+        vehicleType: newVehicleType,
+        status: "available",
+      });
+      
+      setDrivers(prev => [...prev, newDriver]);
+      setNewDriverName("");
+      setNewVehicleType("");
+      
+      toast({
+        title: "Driver Added",
+        description: `${newDriver.name} has been added to the fleet.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add driver",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const addTrafficEvent = async (type: TrafficEvent['type']) => {
+    try {
+      const newEvent = await apiService.addTrafficEvent({
+        type,
+        location: `Auto-generated ${type} location`,
+        severity: 'medium',
+        duration: 30,
+      });
+      
+      setTrafficEvents(prev => [...prev, newEvent]);
+      
+      toast({
+        title: "Traffic Event Added",
+        description: `${type.replace('_', ' ')} event has been created.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add traffic event",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const removeTrafficEvent = async (id: string) => {
+    try {
+      await apiService.removeTrafficEvent(id);
+      setTrafficEvents(prev => prev.filter(event => event.id !== id));
+      
+      toast({
+        title: "Event Removed",
+        description: "Traffic event has been removed.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to remove traffic event",
+        variant: "destructive",
+      });
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Simulation Controls */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Car className="h-5 w-5" />
+              <span>Simulation Controls</span>
+            </div>
+            {isSimulationRunning && (
+              <Badge variant="default" className="ml-auto">
+                <div className="w-2 h-2 bg-fleet-active rounded-full mr-2 animate-pulse"></div>
+                Running
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex space-x-2">
+            <Button 
+              onClick={startSimulation} 
+              disabled={isSimulationRunning || loading}
+              className="flex items-center space-x-2"
+            >
+              <Play className="h-4 w-4" />
+              <span>{loading ? "Starting..." : "Start"}</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={pauseSimulation} 
+              disabled={!isSimulationRunning || loading}
+              className="flex items-center space-x-2"
+            >
+              <Pause className="h-4 w-4" />
+              <span>{loading ? "Pausing..." : "Pause"}</span>
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={stopSimulation}
+              disabled={loading}
+              className="flex items-center space-x-2"
+            >
+              <Square className="h-4 w-4" />
+              <span>{loading ? "Stopping..." : "Stop"}</span>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Driver Management */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Driver Management</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="driver-name">Driver Name</Label>
+              <Input
+                id="driver-name"
+                value={newDriverName}
+                onChange={(e) => setNewDriverName(e.target.value)}
+                placeholder="Enter driver name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="vehicle-type">Vehicle Type</Label>
+              <Select value={newVehicleType} onValueChange={setNewVehicleType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select vehicle" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Truck">Delivery Truck</SelectItem>
+                  <SelectItem value="Van">Cargo Van</SelectItem>
+                  <SelectItem value="Motorcycle">Motorcycle</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <Button onClick={addDriver} className="w-full" disabled={loading}>
+            <Plus className="h-4 w-4 mr-2" />
+            {loading ? "Adding..." : "Add Driver"}
+          </Button>
+          
+          <div className="space-y-2">
+            <h4 className="font-medium">Current Drivers ({drivers.length})</h4>
+            <div className="space-y-2 max-h-32 overflow-y-auto">
+              {drivers.map((driver) => (
+                <div key={driver.id} className="flex items-center justify-between p-2 border rounded">
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-2 h-2 rounded-full ${
+                      driver.status === 'active' ? 'bg-fleet-active' :
+                      driver.status === 'assigned' ? 'bg-fleet-warning' : 'bg-fleet-idle'
+                    }`} />
+                    <span className="text-sm font-medium">{driver.name}</span>
+                    <Badge variant="outline" className="text-xs">{driver.vehicleType}</Badge>
+                  </div>
+                  <Badge variant={driver.status === 'active' ? 'default' : 'secondary'}>
+                    {driver.status}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Traffic Events */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <AlertTriangle className="h-5 w-5" />
+            <span>Traffic Events</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-3 gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => addTrafficEvent('accident')}
+              className="text-xs"
+              disabled={loading}
+            >
+              Add Accident
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => addTrafficEvent('construction')}
+              className="text-xs"
+              disabled={loading}
+            >
+              Add Construction
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => addTrafficEvent('heavy_traffic')}
+              className="text-xs"
+              disabled={loading}
+            >
+              Add Traffic Jam
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            <h4 className="font-medium">Active Events ({trafficEvents.length})</h4>
+            <div className="space-y-2 max-h-32 overflow-y-auto">
+              {trafficEvents.map((event) => (
+                <div key={event.id} className="flex items-center justify-between p-2 border rounded">
+                  <div className="flex items-center space-x-2">
+                    <AlertTriangle className={`h-3 w-3 ${
+                      event.severity === 'high' ? 'text-destructive' :
+                      event.severity === 'medium' ? 'text-fleet-warning' : 'text-fleet-idle'
+                    }`} />
+                    <span className="text-xs">{event.type.replace('_', ' ')}</span>
+                    <span className="text-xs text-muted-foreground">{event.location}</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-1">
+                      <Clock className="h-3 w-3" />
+                      <span className="text-xs">{event.duration}m</span>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => removeTrafficEvent(event.id)}
+                      className="h-6 w-6 p-0"
+                      disabled={loading}
+                    >
+                      ×
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {trafficEvents.length === 0 && (
+                <p className="text-sm text-muted-foreground">No active traffic events</p>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,99 +7,183 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Play, Pause, Square, Plus, AlertTriangle, Car, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-interface Driver {
-  id: string;
-  name: string;
-  vehicleType: string;
-  status: "available" | "assigned" | "active";
-}
-
-interface TrafficEvent {
-  id: string;
-  type: "accident" | "construction" | "heavy_traffic";
-  location: string;
-  severity: "low" | "medium" | "high";
-  duration: number;
-}
+import { 
+  startSimulation as apiStartSimulation,
+  pauseSimulation as apiPauseSimulation,
+  stopSimulation as apiStopSimulation,
+  getDrivers,
+  addDriver as apiAddDriver,
+  getTrafficEvents,
+  addTrafficEvent as apiAddTrafficEvent,
+  removeTrafficEvent as apiRemoveTrafficEvent,
+  Driver,
+  TrafficEvent
+} from "@/lib/api";
 
 export function SimulationControls() {
   const [isSimulationRunning, setIsSimulationRunning] = useState(false);
-  const [drivers, setDrivers] = useState<Driver[]>([
-    { id: "D001", name: "Mike Johnson", vehicleType: "Truck", status: "available" },
-    { id: "D002", name: "Sarah Chen", vehicleType: "Van", status: "active" },
-  ]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [trafficEvents, setTrafficEvents] = useState<TrafficEvent[]>([]);
   const [newDriverName, setNewDriverName] = useState("");
   const [newVehicleType, setNewVehicleType] = useState("");
+  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  const startSimulation = () => {
-    setIsSimulationRunning(true);
-    toast({
-      title: "Simulation Started",
-      description: "Fleet simulation is now running with live updates.",
-    });
+  // Load initial data
+  useEffect(() => {
+    loadDrivers();
+    loadTrafficEvents();
+  }, []);
+
+  const loadDrivers = async () => {
+    try {
+      const driversData = await getDrivers();
+      setDrivers(driversData);
+    } catch (error) {
+      console.error("Failed to load drivers:", error);
+    }
   };
 
-  const pauseSimulation = () => {
-    setIsSimulationRunning(false);
-    toast({
-      title: "Simulation Paused",
-      description: "Fleet simulation has been paused.",
-    });
+  const loadTrafficEvents = async () => {
+    try {
+      const eventsData = await getTrafficEvents();
+      setTrafficEvents(eventsData);
+    } catch (error) {
+      console.error("Failed to load traffic events:", error);
+    }
   };
 
-  const stopSimulation = () => {
-    setIsSimulationRunning(false);
-    setTrafficEvents([]);
-    toast({
-      title: "Simulation Stopped",
-      description: "Fleet simulation has been reset.",
-    });
+  const startSimulation = async () => {
+    setLoading(true);
+    try {
+      await apiStartSimulation();
+      setIsSimulationRunning(true);
+      toast({
+        title: "Simulation Started",
+        description: "Fleet simulation is now running with live updates.",
+      });
+    } catch (error) {
+      console.error("Failed to start simulation:", error);
+      toast({
+        title: "Error",
+        description: "Failed to start simulation",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const addDriver = () => {
+  const pauseSimulation = async () => {
+    setLoading(true);
+    try {
+      await apiPauseSimulation();
+      setIsSimulationRunning(false);
+      toast({
+        title: "Simulation Paused",
+        description: "Fleet simulation has been paused.",
+      });
+    } catch (error) {
+      console.error("Failed to pause simulation:", error);
+      toast({
+        title: "Error",
+        description: "Failed to pause simulation",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const stopSimulation = async () => {
+    setLoading(true);
+    try {
+      await apiStopSimulation();
+      setIsSimulationRunning(false);
+      setTrafficEvents([]);
+      toast({
+        title: "Simulation Stopped",
+        description: "Fleet simulation has been reset.",
+      });
+    } catch (error) {
+      console.error("Failed to stop simulation:", error);
+      toast({
+        title: "Error", 
+        description: "Failed to stop simulation",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addDriver = async () => {
     if (!newDriverName || !newVehicleType) return;
     
-    const newDriver: Driver = {
-      id: `D${String(drivers.length + 1).padStart(3, '0')}`,
-      name: newDriverName,
-      vehicleType: newVehicleType,
-      status: "available"
-    };
-    
-    setDrivers([...drivers, newDriver]);
-    setNewDriverName("");
-    setNewVehicleType("");
-    toast({
-      title: "Driver Added",
-      description: `${newDriverName} has been added to the fleet.`,
-    });
+    try {
+      const newDriver = await apiAddDriver({
+        name: newDriverName,
+        vehicleType: newVehicleType,
+        status: "available"
+      });
+      
+      setDrivers([...drivers, newDriver]);
+      setNewDriverName("");
+      setNewVehicleType("");
+      toast({
+        title: "Driver Added",
+        description: `${newDriverName} has been added to the fleet.`,
+      });
+    } catch (error) {
+      console.error("Failed to add driver:", error);
+      toast({
+        title: "Error",
+        description: "Failed to add driver",
+        variant: "destructive",
+      });
+    }
   };
 
-  const addTrafficEvent = (type: TrafficEvent['type']) => {
+  const addTrafficEvent = async (type: TrafficEvent['type']) => {
     const locations = ["Downtown District", "Highway 101", "Industrial Zone", "City Center"];
     const location = locations[Math.floor(Math.random() * locations.length)];
     
-    const newEvent: TrafficEvent = {
-      id: `T${Date.now()}`,
-      type,
-      location,
-      severity: ["low", "medium", "high"][Math.floor(Math.random() * 3)] as TrafficEvent['severity'],
-      duration: Math.floor(Math.random() * 60) + 15
-    };
-    
-    setTrafficEvents([...trafficEvents, newEvent]);
-    toast({
-      title: "Traffic Event Added",
-      description: `${type.replace('_', ' ')} reported at ${location}`,
-      variant: "destructive"
-    });
+    try {
+      const newEvent = await apiAddTrafficEvent({
+        type,
+        location,
+        severity: ["low", "medium", "high"][Math.floor(Math.random() * 3)] as TrafficEvent['severity'],
+        duration: Math.floor(Math.random() * 60) + 15
+      });
+      
+      setTrafficEvents([...trafficEvents, newEvent]);
+      toast({
+        title: "Traffic Event Added",
+        description: `${type.replace('_', ' ')} reported at ${location}`,
+        variant: "destructive"
+      });
+    } catch (error) {
+      console.error("Failed to add traffic event:", error);
+      toast({
+        title: "Error",
+        description: "Failed to add traffic event", 
+        variant: "destructive",
+      });
+    }
   };
 
-  const removeTrafficEvent = (eventId: string) => {
-    setTrafficEvents(trafficEvents.filter(event => event.id !== eventId));
+  const removeTrafficEvent = async (eventId: string) => {
+    try {
+      await apiRemoveTrafficEvent(eventId);
+      setTrafficEvents(trafficEvents.filter(event => event.id !== eventId));
+    } catch (error) {
+      console.error("Failed to remove traffic event:", error);
+      toast({
+        title: "Error",
+        description: "Failed to remove traffic event",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -122,28 +206,29 @@ export function SimulationControls() {
           <div className="flex space-x-2">
             <Button 
               onClick={startSimulation} 
-              disabled={isSimulationRunning}
+              disabled={isSimulationRunning || loading}
               className="flex items-center space-x-2"
             >
               <Play className="h-4 w-4" />
-              <span>Start</span>
+              <span>{loading ? "Starting..." : "Start"}</span>
             </Button>
             <Button 
               variant="outline" 
               onClick={pauseSimulation} 
-              disabled={!isSimulationRunning}
+              disabled={!isSimulationRunning || loading}
               className="flex items-center space-x-2"
             >
               <Pause className="h-4 w-4" />
-              <span>Pause</span>
+              <span>{loading ? "Pausing..." : "Pause"}</span>
             </Button>
             <Button 
               variant="destructive" 
               onClick={stopSimulation}
+              disabled={loading}
               className="flex items-center space-x-2"
             >
               <Square className="h-4 w-4" />
-              <span>Stop</span>
+              <span>{loading ? "Stopping..." : "Stop"}</span>
             </Button>
           </div>
         </CardContent>
@@ -179,9 +264,9 @@ export function SimulationControls() {
               </Select>
             </div>
           </div>
-          <Button onClick={addDriver} className="w-full">
+          <Button onClick={addDriver} className="w-full" disabled={loading}>
             <Plus className="h-4 w-4 mr-2" />
-            Add Driver
+            {loading ? "Adding..." : "Add Driver"}
           </Button>
           
           <div className="space-y-2">
@@ -221,6 +306,7 @@ export function SimulationControls() {
               variant="outline" 
               onClick={() => addTrafficEvent('accident')}
               className="text-xs"
+              disabled={loading}
             >
               Add Accident
             </Button>
@@ -228,6 +314,7 @@ export function SimulationControls() {
               variant="outline" 
               onClick={() => addTrafficEvent('construction')}
               className="text-xs"
+              disabled={loading}
             >
               Add Construction
             </Button>
@@ -235,6 +322,7 @@ export function SimulationControls() {
               variant="outline" 
               onClick={() => addTrafficEvent('heavy_traffic')}
               className="text-xs"
+              disabled={loading}
             >
               Add Traffic Jam
             </Button>
@@ -263,6 +351,7 @@ export function SimulationControls() {
                       size="sm" 
                       onClick={() => removeTrafficEvent(event.id)}
                       className="h-6 w-6 p-0"
+                      disabled={loading}
                     >
                       ×
                     </Button>
