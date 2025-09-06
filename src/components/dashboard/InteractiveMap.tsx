@@ -20,7 +20,7 @@ interface Vehicle {
 export function InteractiveMap() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
-  const [mapboxToken, setMapboxToken] = useState('');
+  const [mapboxToken] = useState(import.meta.env.VITE_MAPBOX_TOKEN || '');
   const [isMapInitialized, setIsMapInitialized] = useState(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(false);
@@ -28,12 +28,15 @@ export function InteractiveMap() {
 
   // Load vehicles from API
   useEffect(() => {
+    if (mapboxToken) {
+      initializeMap();
+    }
     loadVehicles();
     
     // Set up auto-refresh every 10 seconds
     const interval = setInterval(loadVehicles, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [mapboxToken]);
 
   const loadVehicles = async () => {
     try {
@@ -76,7 +79,7 @@ export function InteractiveMap() {
   };
 
   const initializeMap = () => {
-    if (!mapboxToken || !mapContainer.current) return;
+    if (!mapboxToken || !mapContainer.current || isMapInitialized) return;
 
     try {
       mapboxgl.accessToken = mapboxToken;
@@ -106,6 +109,7 @@ export function InteractiveMap() {
       });
 
     } catch (error) {
+      console.error('Map initialization error:', error);
       toast({
         title: "Map Error",
         description: "Failed to initialize map. Please check your Mapbox token.",
@@ -198,6 +202,34 @@ export function InteractiveMap() {
     };
   }, []);
 
+  // Auto-initialize map when token is available
+  useEffect(() => {
+    if (mapboxToken && !isMapInitialized) {
+      initializeMap();
+    }
+  }, [mapboxToken, isMapInitialized]);
+
+  if (mapboxToken && !isMapInitialized) {
+    return (
+      <Card className="h-[600px] flex flex-col">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center space-x-2">
+              <MapPin className="h-5 w-5" />
+              <span>Initializing Fleet Map...</span>
+            </CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <p className="text-sm text-muted-foreground">Loading map with Mapbox...</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (!isMapInitialized && !mapboxToken) {
     return (
       <Card className="h-[600px] flex flex-col">
@@ -272,11 +304,16 @@ export function InteractiveMap() {
             )}
           </CardTitle>
           <div className="flex space-x-2">
-            <Button variant="outline" size="sm" onClick={() => map.current?.setStyle('mapbox://styles/mapbox/satellite-v9')}>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => map.current?.setStyle('mapbox://styles/mapbox/satellite-v9')}
+              disabled={!isMapInitialized}
+            >
               <Layers className="h-4 w-4 mr-2" />
               Satellite
             </Button>
-            <Button variant="outline" size="sm" onClick={refreshMap} disabled={loading}>
+            <Button variant="outline" size="sm" onClick={refreshMap} disabled={loading || !isMapInitialized}>
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               {loading ? 'Updating...' : 'Refresh'}
             </Button>
@@ -284,24 +321,7 @@ export function InteractiveMap() {
         </div>
       </CardHeader>
       <CardContent className="flex-1 p-0">
-        {!isMapInitialized ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center space-y-4 max-w-md p-6">
-              <Input
-                type="password"
-                placeholder="Enter Mapbox token to initialize map..."
-                value={mapboxToken}
-                onChange={(e) => setMapboxToken(e.target.value)}
-                className="font-mono text-xs"
-              />
-              <Button onClick={initializeMap} disabled={!mapboxToken}>
-                Initialize Map
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div ref={mapContainer} className="w-full h-full rounded-b-lg" />
-        )}
+        <div ref={mapContainer} className="w-full h-full rounded-b-lg" />
       </CardContent>
     </Card>
   );

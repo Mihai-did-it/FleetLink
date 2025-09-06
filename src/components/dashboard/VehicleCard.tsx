@@ -2,10 +2,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Truck, MapPin, Clock, Package, MoreHorizontal, Navigation, Pause, AlertTriangle, CheckCircle } from "lucide-react";
+import { Truck, MapPin, Clock, Package, MoreHorizontal, Navigation, Pause, AlertTriangle, CheckCircle, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { updateVehicleStatus, assignRoute } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { logAction } from "./ActionLogger";
 
 interface VehicleCardProps {
   vehicle: {
@@ -19,6 +20,7 @@ interface VehicleCardProps {
     eta: string;
   };
   onVehicleUpdate?: () => void;
+  onViewDetails?: (vehicle: VehicleCardProps['vehicle']) => void;
 }
 
 const statusConfig = {
@@ -40,17 +42,19 @@ const statusConfig = {
   }
 };
 
-export function VehicleCard({ vehicle, onVehicleUpdate }: VehicleCardProps) {
+export function VehicleCard({ vehicle, onVehicleUpdate, onViewDetails }: VehicleCardProps) {
   const status = statusConfig[vehicle.status];
   const { toast } = useToast();
   
   const handleStatusUpdate = async (newStatus: typeof vehicle.status) => {
     try {
+      logAction(`Updating ${vehicle.id} status to ${newStatus}...`, "info");
       await updateVehicleStatus(vehicle.id, newStatus);
       toast({
         title: "Status Updated",
         description: `${vehicle.id} status changed to ${newStatus}`,
       });
+      logAction(`${vehicle.id} status updated to ${newStatus}`, "success");
       onVehicleUpdate?.();
     } catch (error) {
       console.error("Failed to update vehicle status:", error);
@@ -59,16 +63,19 @@ export function VehicleCard({ vehicle, onVehicleUpdate }: VehicleCardProps) {
         description: "Failed to update vehicle status",
         variant: "destructive",
       });
+      logAction(`Failed to update ${vehicle.id} status`, "error");
     }
   };
 
   const handleAssignRoute = async () => {
     try {
+      logAction(`Assigning route to ${vehicle.id}...`, "info");
       await assignRoute(vehicle.id, "Optimized route assigned");
       toast({
         title: "Route Assigned",
         description: `New route assigned to ${vehicle.id}`,
       });
+      logAction(`Route assigned to ${vehicle.id}`, "success");
       onVehicleUpdate?.();
     } catch (error) {
       console.error("Failed to assign route:", error);
@@ -77,6 +84,7 @@ export function VehicleCard({ vehicle, onVehicleUpdate }: VehicleCardProps) {
         description: "Failed to assign route",
         variant: "destructive",
       });
+      logAction(`Failed to assign route to ${vehicle.id}`, "error");
     }
   };
   
@@ -100,6 +108,10 @@ export function VehicleCard({ vehicle, onVehicleUpdate }: VehicleCardProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onViewDetails?.(vehicle)}>
+                <Eye className="h-4 w-4 mr-2" />
+                View Details
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleAssignRoute}>
                 <Navigation className="h-4 w-4 mr-2" />
                 Assign Route
@@ -151,6 +163,21 @@ export function VehicleCard({ vehicle, onVehicleUpdate }: VehicleCardProps) {
               <Clock className="h-3 w-3 mr-1" />
               ETA: {vehicle.eta}
             </p>
+          </div>
+          
+          <div className="pt-3">
+            <Button 
+              onClick={() => {
+                logAction(`Opening details for ${vehicle.id}`, "info");
+                onViewDetails?.(vehicle);
+              }}
+              variant="outline" 
+              size="sm" 
+              className="w-full"
+            >
+              <Eye className="h-4 w-4 mr-2" />
+              View Details
+            </Button>
           </div>
         </div>
       </CardContent>

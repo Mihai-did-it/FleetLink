@@ -1,4 +1,5 @@
 import { VehicleCard } from "./VehicleCard";
+import { VehicleDetailsModal } from "./VehicleDetailsModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,17 @@ export function VehiclesTab() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [selectedVehicle, setSelectedVehicle] = useState<{
+    id: string;
+    driver: string;
+    status: "active" | "idle" | "warning" | "danger";
+    location: string;
+    speed: number;
+    nextStop: string;
+    packages: number;
+    eta: string;
+  } | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [newVehicle, setNewVehicle] = useState({
     vehicle_id: "",
     driver: "",
@@ -102,6 +114,16 @@ export function VehiclesTab() {
     packages: vehicle.packages || 0,
     eta: vehicle.eta || "--"
   }));
+
+  const handleViewDetails = (vehicle: typeof selectedVehicle) => {
+    setSelectedVehicle(vehicle);
+    setShowDetailsModal(true);
+  };
+
+  const handleCloseDetailsModal = () => {
+    setShowDetailsModal(false);
+    setSelectedVehicle(null);
+  };
 
   const filteredVehicles = transformedVehicles.filter(vehicle => {
     const matchesSearch = vehicle.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -255,6 +277,7 @@ export function VehiclesTab() {
               key={vehicle.id} 
               vehicle={vehicle} 
               onVehicleUpdate={loadVehicles}
+              onViewDetails={handleViewDetails}
             />
           ))}
         </div>
@@ -270,6 +293,14 @@ export function VehiclesTab() {
           </Card>
         )}
       </div>
+
+      {/* Vehicle Details Modal */}
+      <VehicleDetailsModal
+        vehicle={selectedVehicle}
+        isOpen={showDetailsModal}
+        onClose={handleCloseDetailsModal}
+        onVehicleUpdate={loadVehicles}
+      />
     </div>
   );
 }
