@@ -25,13 +25,30 @@ interface Vehicle {
   progress?: number; // 0-100 for progress bar
 }
 
+interface NewVehicle {
+  id: string;
+  driver: string;
+  lat: number;
+  lng: number;
+}
+
+interface NewPackage {
+  vehicleId: string;
+  destination: string;
+  weight: number;
+}
+
 export default function App() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [isFleetPanelCollapsed, setIsFleetPanelCollapsed] = useState(false);
-  const [isControlPanelCollapsed, setIsControlPanelCollapsed] = useState(false);
   const [showVehicleDrawer, setShowVehicleDrawer] = useState(false);
-  const [activeTab, setActiveTab] = useState<'add-vehicle' | 'add-packages' | 'routes'>('add-vehicle');
+  const [activeSection, setActiveSection] = useState<'fleet' | 'add-vehicle' | 'add-packages' | 'routes'>('fleet');
+  const [isConnected, setIsConnected] = useState(false);
+  
+  // Form states
+  const [newVehicle, setNewVehicle] = useState<NewVehicle>({ id: '', driver: '', lat: 37.7749, lng: -122.4194 });
+  const [newPackage, setNewPackage] = useState<NewPackage>({ vehicleId: '', destination: '', weight: 0 });
   
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
