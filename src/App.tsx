@@ -28,8 +28,7 @@ interface Vehicle {
 interface NewVehicle {
   id: string;
   driver: string;
-  lat: number;
-  lng: number;
+  location: string;
 }
 
 interface NewPackage {
@@ -38,17 +37,24 @@ interface NewPackage {
   weight: number;
 }
 
+interface LocationSuggestion {
+  place_name: string;
+  center: [number, number]; // [lng, lat]
+}
+
 export default function App() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [isFleetPanelCollapsed, setIsFleetPanelCollapsed] = useState(false);
   const [showVehicleDrawer, setShowVehicleDrawer] = useState(false);
-  const [activeSection, setActiveSection] = useState<'fleet' | 'add-vehicle' | 'add-packages' | 'routes'>('fleet');
+  const [activeSection, setActiveSection] = useState<'fleet' | 'add-vehicle' | 'add-packages' | 'simulation'>('fleet');
   const [isConnected, setIsConnected] = useState(false);
   
   // Form states
-  const [newVehicle, setNewVehicle] = useState<NewVehicle>({ id: '', driver: '', lat: 37.7749, lng: -122.4194 });
+  const [newVehicle, setNewVehicle] = useState<NewVehicle>({ id: '', driver: '', location: '' });
   const [newPackage, setNewPackage] = useState<NewPackage>({ vehicleId: '', destination: '', weight: 0 });
+  const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
+  const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
   
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -63,7 +69,7 @@ export default function App() {
 
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/light-v11', // Light theme
+      style: 'mapbox://styles/mapbox/streets-v12', // Colorful streets style
       center: [-122.4194, 37.7749], // San Francisco
       zoom: 12,
       attributionControl: false,
@@ -109,9 +115,41 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // Location search function
+  const searchLocation = async (query: string) => {
+    if (query.length < 3) {
+      setLocationSuggestions([]);
+      return;
+    }
+
+    try {
+      const mapboxToken = 'pk.eyJ1IjoibW5pZmFpIiwiYSI6ImNtZjM5dng3dzAxZWYybHEwdmZ2MmE4MDkifQ.CGxxP82dHH4tu6V9D6FhHg';
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${mapboxToken}&limit=5&types=place,locality,neighborhood,address`
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        setLocationSuggestions(data.features || []);
+        setShowLocationSuggestions(true);
+      }
+    } catch (error) {
+      console.error('Location search failed:', error);
+      setLocationSuggestions([]);
+    }
+  };
+
   // Add vehicle function
   const addVehicle = async () => {
-    if (!newVehicle.id || !newVehicle.driver) return;
+    if (!newVehicle.id || !newVehicle.driver || !newVehicle.location) return;
+    
+    // Get coordinates for the location
+    let coordinates = { lat: 37.7749, lng: -122.4194 }; // Default SF coords
+    
+    if (locationSuggestions.length > 0) {
+      const [lng, lat] = locationSuggestions[0].center;
+      coordinates = { lat, lng };
+    }
     
     try {
       const response = await fetch('http://localhost:8000/vehicles', {
@@ -120,16 +158,18 @@ export default function App() {
         body: JSON.stringify({
           vehicle_id: newVehicle.id,
           driver: newVehicle.driver,
-          lat: newVehicle.lat,
-          lng: newVehicle.lng,
+          lat: coordinates.lat,
+          lng: coordinates.lng,
           status: 'idle',
           speed: 0,
-          location: 'Added via interface'
+          location: newVehicle.location
         })
       });
       
       if (response.ok) {
-        setNewVehicle({ id: '', driver: '', lat: 37.7749, lng: -122.4194 });
+        setNewVehicle({ id: '', driver: '', location: '' });
+        setLocationSuggestions([]);
+        setShowLocationSuggestions(false);
         // Refresh vehicles list
         const vehiclesResponse = await fetch('http://localhost:8000/vehicles');
         if (vehiclesResponse.ok) {
@@ -201,6 +241,19 @@ export default function App() {
     });
   }, [vehicles]);
 
+  // Close location suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.location-search-container')) {
+        setShowLocationSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'on-time': return 'text-emerald-600';
@@ -242,7 +295,7 @@ export default function App() {
 
               {/* Navigation Menu */}
               <div className="flex items-center space-x-2">
-                {['fleet', 'add-vehicle', 'add-packages', 'routes'].map((section) => (
+                {['fleet', 'add-vehicle', 'add-packages', 'simulation'].map((section) => (
                   <button
                     key={section}
                     onClick={() => setActiveSection(section as any)}
@@ -254,7 +307,7 @@ export default function App() {
                   >
                     {section === 'fleet' ? 'Fleet' : 
                      section === 'add-vehicle' ? 'Add Vehicle' :
-                     section === 'add-packages' ? 'Add Packages' : 'Routes'}
+                     section === 'add-packages' ? 'Add Packages' : 'Simulation'}
                   </button>
                 ))}
               </div>
@@ -390,31 +443,42 @@ export default function App() {
                         className="w-full px-3 py-2 bg-white/50 backdrop-blur-xl border border-white/30 rounded-lg text-slate-800 placeholder-slate-500 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent"
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Latitude</label>
-                        <input
-                          type="number"
-                          step="0.0001"
-                          value={newVehicle.lat}
-                          onChange={(e) => setNewVehicle(prev => ({ ...prev, lat: parseFloat(e.target.value) }))}
-                          className="w-full px-3 py-2 bg-white/50 backdrop-blur-xl border border-white/30 rounded-lg text-slate-800 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Longitude</label>
-                        <input
-                          type="number"
-                          step="0.0001"
-                          value={newVehicle.lng}
-                          onChange={(e) => setNewVehicle(prev => ({ ...prev, lng: parseFloat(e.target.value) }))}
-                          className="w-full px-3 py-2 bg-white/50 backdrop-blur-xl border border-white/30 rounded-lg text-slate-800 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                        />
-                      </div>
+                    <div className="relative location-search-container">
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Starting Location</label>
+                      <input
+                        type="text"
+                        placeholder="Search for location..."
+                        value={newVehicle.location}
+                        onChange={(e) => {
+                          setNewVehicle(prev => ({ ...prev, location: e.target.value }));
+                          searchLocation(e.target.value);
+                        }}
+                        onFocus={() => setShowLocationSuggestions(locationSuggestions.length > 0)}
+                        className="w-full px-3 py-2 bg-white/50 backdrop-blur-xl border border-white/30 rounded-lg text-slate-800 placeholder-slate-500 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                      />
+                      
+                      {/* Location Suggestions Dropdown */}
+                      {showLocationSuggestions && locationSuggestions.length > 0 && (
+                        <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white/90 backdrop-blur-xl border border-white/30 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                          {locationSuggestions.map((suggestion, index) => (
+                            <button
+                              key={index}
+                              type="button"
+                              onClick={() => {
+                                setNewVehicle(prev => ({ ...prev, location: suggestion.place_name }));
+                                setShowLocationSuggestions(false);
+                              }}
+                              className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-blue-50 first:rounded-t-lg last:rounded-b-lg"
+                            >
+                              {suggestion.place_name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <button
                       onClick={addVehicle}
-                      disabled={!newVehicle.id || !newVehicle.driver}
+                      disabled={!newVehicle.id || !newVehicle.driver || !newVehicle.location}
                       className="w-full px-4 py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-slate-300 text-white rounded-lg transition-colors text-sm font-medium shadow-lg"
                     >
                       Add Vehicle
@@ -471,36 +535,87 @@ export default function App() {
                 </>
               )}
 
-              {activeSection === 'routes' && (
+              {activeSection === 'simulation' && (
                 <>
-                  <h3 className="text-lg font-semibold text-slate-800 mb-4">Route Planning</h3>
+                  <h3 className="text-lg font-semibold text-slate-800 mb-4">Fleet Simulation</h3>
                   <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">Select Vehicle</label>
-                      <select className="w-full px-3 py-2 bg-white/50 backdrop-blur-xl border border-white/30 rounded-lg text-slate-800 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent">
-                        <option>Choose vehicle...</option>
-                        {vehicles.map(v => (
-                          <option key={v.vehicle_id} value={v.vehicle_id}>{v.vehicle_id}</option>
-                        ))}
-                      </select>
+                    <div className="bg-white/40 backdrop-blur-xl rounded-lg p-4 border border-white/30">
+                      <h4 className="font-medium text-slate-800 mb-2">Simulation Controls</h4>
+                      <p className="text-sm text-slate-600 mb-4">
+                        Start simulation to send vehicles on delivery routes. Vehicles will move to their package destinations automatically.
+                      </p>
+                      
+                      <div className="space-y-3">
+                        <button 
+                          onClick={async () => {
+                            try {
+                              const response = await fetch('http://localhost:8000/simulation/start', {
+                                method: 'POST'
+                              });
+                              if (response.ok) {
+                                console.log('Simulation started');
+                              }
+                            } catch (error) {
+                              console.error('Failed to start simulation:', error);
+                            }
+                          }}
+                          disabled={vehicles.length === 0}
+                          className="w-full px-4 py-3 bg-green-500 hover:bg-green-600 disabled:bg-slate-300 text-white rounded-lg transition-colors text-sm font-medium shadow-lg"
+                        >
+                          🚀 Start Simulation
+                        </button>
+                        
+                        <button 
+                          onClick={async () => {
+                            try {
+                              const response = await fetch('http://localhost:8000/simulation/stop', {
+                                method: 'POST'
+                              });
+                              if (response.ok) {
+                                console.log('Simulation stopped');
+                              }
+                            } catch (error) {
+                              console.error('Failed to stop simulation:', error);
+                            }
+                          }}
+                          className="w-full px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors text-sm font-medium shadow-lg"
+                        >
+                          ⏹️ Stop Simulation
+                        </button>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">Add Stop</label>
-                      <input
-                        type="text"
-                        placeholder="Stop location"
-                        className="w-full px-3 py-2 bg-white/50 backdrop-blur-xl border border-white/30 rounded-lg text-slate-800 placeholder-slate-500 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                      />
+
+                    <div className="bg-white/40 backdrop-blur-xl rounded-lg p-4 border border-white/30">
+                      <h4 className="font-medium text-slate-800 mb-2">Simulation Status</h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Active Vehicles:</span>
+                          <span className="text-slate-800 font-medium">
+                            {vehicles.filter(v => v.status === 'active' || v.status === 'on-time').length}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Total Packages:</span>
+                          <span className="text-slate-800 font-medium">
+                            {vehicles.reduce((sum, v) => sum + v.packages.length, 0)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">In Transit:</span>
+                          <span className="text-slate-800 font-medium">
+                            {vehicles.reduce((sum, v) => sum + v.packages.filter(p => p.status === 'in-transit').length, 0)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <button className="w-full px-4 py-3 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors text-sm font-medium shadow-lg">
-                      Add Stop
-                    </button>
-                    <div className="pt-3 border-t border-white/20">
-                      <label className="flex items-center space-x-2 text-sm text-slate-700">
-                        <input type="checkbox" className="rounded border-white/30" defaultChecked />
-                        <span>Return to depot</span>
-                      </label>
-                    </div>
+
+                    {vehicles.length === 0 && (
+                      <div className="text-center py-6">
+                        <div className="text-4xl mb-3">🚛</div>
+                        <div className="text-slate-600 text-sm">No vehicles available</div>
+                        <div className="text-slate-500 text-xs mt-1">Add vehicles to start simulation</div>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -598,6 +713,43 @@ export default function App() {
                   </div>
                 )}
               </div>
+
+              {/* Route Information */}
+              {selectedVehicle.packages.length > 0 && (
+                <div className="bg-white/40 backdrop-blur-xl rounded-xl p-4 border border-white/30">
+                  <h3 className="text-lg font-semibold text-slate-800 mb-3">Delivery Route</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-3 p-2 bg-white/30 rounded-lg">
+                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                      <div className="text-sm">
+                        <div className="font-medium text-slate-800">Start: {selectedVehicle.location}</div>
+                        <div className="text-slate-600 text-xs">Current location</div>
+                      </div>
+                    </div>
+                    
+                    {selectedVehicle.packages.map((pkg, index) => (
+                      <div key={pkg.id} className="flex items-center space-x-3 p-2 bg-white/30 rounded-lg">
+                        <div className={`w-3 h-3 rounded-full ${
+                          pkg.status === 'delivered' ? 'bg-emerald-500' :
+                          pkg.status === 'in-transit' ? 'bg-blue-500' : 'bg-amber-500'
+                        }`}></div>
+                        <div className="text-sm">
+                          <div className="font-medium text-slate-800">Stop {index + 1}: {pkg.destination}</div>
+                          <div className="text-slate-600 text-xs">Package {pkg.id} • {pkg.weight} lbs</div>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    <div className="flex items-center space-x-3 p-2 bg-white/30 rounded-lg">
+                      <div className="w-3 h-3 rounded-full bg-slate-400"></div>
+                      <div className="text-sm">
+                        <div className="font-medium text-slate-800">Return to Depot</div>
+                        <div className="text-slate-600 text-xs">Final destination</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Quick Actions */}
               <div className="space-y-3">
