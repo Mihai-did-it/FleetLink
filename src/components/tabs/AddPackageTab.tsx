@@ -7,11 +7,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { toast } from '@/hooks/use-toast'
 import { addPackage, type Vehicle } from '@/lib/local-api'
 import { LocationFinder } from '../common/LocationFinder'
+import { Target } from 'lucide-react'
 
 interface AddPackageTabProps {
   mapboxToken: string
   vehicles: Vehicle[]
   onPackageAdded?: () => void
+  onMapPickerToggle?: (
+    active: boolean, 
+    onLocationSelect: (location: { address: string; lat: number; lng: number }) => void,
+    mode?: 'vehicle' | 'package' | 'general',
+    title?: string
+  ) => void
 }
 
 interface NewPackage {
@@ -26,7 +33,7 @@ interface NewPackage {
   package_type: string
 }
 
-export function AddPackageTab({ mapboxToken, vehicles, onPackageAdded }: AddPackageTabProps) {
+export function AddPackageTab({ mapboxToken, vehicles, onPackageAdded, onMapPickerToggle }: AddPackageTabProps) {
   const [newPackage, setNewPackage] = useState<NewPackage>({
     package_id: '',
     vehicle_id: '',
@@ -45,6 +52,12 @@ export function AddPackageTab({ mapboxToken, vehicles, onPackageAdded }: AddPack
       destination_lat: location.lat,
       destination_lng: location.lng
     }))
+  }
+
+  const handleMapPickerClick = () => {
+    if (onMapPickerToggle) {
+      onMapPickerToggle(true, handleLocationSelect, 'package', 'Choose package delivery location on the map')
+    }
   }
 
   const handleAddPackage = async (e: React.FormEvent) => {
@@ -117,14 +130,15 @@ export function AddPackageTab({ mapboxToken, vehicles, onPackageAdded }: AddPack
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          📦 Add Package
-        </CardTitle>
-        <CardDescription>
-          Assign a new package to a vehicle for delivery
-        </CardDescription>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            📦 Add Package
+          </CardTitle>
+          <CardDescription>
+            Assign a new package to a vehicle for delivery
+          </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleAddPackage} className="space-y-4">
@@ -157,12 +171,28 @@ export function AddPackageTab({ mapboxToken, vehicles, onPackageAdded }: AddPack
 
           <div className="space-y-2">
             <Label htmlFor="destination">Delivery Destination</Label>
-            <LocationFinder
-              mapboxToken={mapboxToken}
-              placeholder="Enter delivery address..."
-              onLocationSelect={handleLocationSelect}
-              value={newPackage.destination}
-            />
+            <div className="space-y-3">
+              <LocationFinder
+                mapboxToken={mapboxToken}
+                placeholder="Enter USA delivery address (e.g., 456 Oak Ave, Austin TX)"
+                onLocationSelect={handleLocationSelect}
+                value={newPackage.destination}
+              />
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-px bg-slate-200"></div>
+                <span className="text-xs text-slate-500 px-2">or</span>
+                <div className="flex-1 h-px bg-slate-200"></div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleMapPickerClick}
+                className="w-full flex items-center gap-2"
+              >
+                <Target className="h-4 w-4" />
+                Pick delivery location on map
+              </Button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -231,5 +261,6 @@ export function AddPackageTab({ mapboxToken, vehicles, onPackageAdded }: AddPack
         </form>
       </CardContent>
     </Card>
+  </>
   )
 }

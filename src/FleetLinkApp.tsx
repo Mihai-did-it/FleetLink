@@ -28,6 +28,9 @@ import {
 import { type VehicleWithPackages } from './types'
 import { AddVehicleTab } from './components/tabs/AddVehicleTab'
 import { AddPackageTab } from './components/tabs/AddPackageTab'
+import { MapLocationPicker } from './components/common/MapLocationPicker'
+import { QuickAddVehicleModal } from './components/modals/QuickAddVehicleModal'
+import { QuickAddPackageModal } from './components/modals/QuickAddPackageModal'
 import { useToast } from '@/hooks/use-toast'
 import { DeliveryOrchestrator } from './systems/DeliveryOrchestrator'
 import { Toaster } from '@/components/ui/toaster'
@@ -84,6 +87,17 @@ export default function FleetLinkApp() {
   });
   const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
+  
+  // Map location picker state
+  const [isMapPickerActive, setIsMapPickerActive] = useState(false);
+  const [mapPickerOnLocationSelect, setMapPickerOnLocationSelect] = useState<((location: { address: string; lat: number; lng: number }) => void) | null>(null);
+  const [mapPickerMode, setMapPickerMode] = useState<'vehicle' | 'package' | 'general'>('general');
+  const [mapPickerTitle, setMapPickerTitle] = useState<string>('Click on the map to select a location');
+  
+  // Quick add modals state
+  const [showQuickAddVehicleModal, setShowQuickAddVehicleModal] = useState(false);
+  const [showQuickAddPackageModal, setShowQuickAddPackageModal] = useState(false);
+  const [quickAddSelectedLocation, setQuickAddSelectedLocation] = useState<{ address: string; lat: number; lng: number } | null>(null);
   
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -1485,6 +1499,136 @@ export default function FleetLinkApp() {
     setFailedVehicles(new Set());
   };
 
+  // Handle map location picker toggle
+  const handleMapPickerToggle = (
+    active: boolean, 
+    onLocationSelect?: (location: { address: string; lat: number; lng: number }) => void,
+    mode: 'vehicle' | 'package' | 'general' = 'general',
+    title: string = 'Click on the map to select a location'
+  ) => {
+    setIsMapPickerActive(active);
+    setMapPickerOnLocationSelect(onLocationSelect ? () => onLocationSelect : null);
+    setMapPickerMode(mode);
+    setMapPickerTitle(title);
+  };
+
+  // Handle map picker location selection
+  const handleMapPickerLocationSelect = (location: { address: string; lat: number; lng: number }) => {
+    if (mapPickerOnLocationSelect) {
+      mapPickerOnLocationSelect(location);
+    }
+    setIsMapPickerActive(false);
+    setMapPickerOnLocationSelect(null);
+    setMapPickerMode('general');
+    setMapPickerTitle('Click on the map to select a location');
+  };
+
+  // Handle map picker cancel
+  const handleMapPickerCancel = () => {
+    setIsMapPickerActive(false);
+    setMapPickerOnLocationSelect(null);
+    setMapPickerMode('general');
+    setMapPickerTitle('Click on the map to select a location');
+  };
+
+  // Quick add vehicle submission
+  const handleQuickAddVehicle = async (vehicleData: {
+    vehicle_id: string;
+    driver: string;
+    location: string;
+    lat: number;
+    lng: number;
+  }) => {
+    setLoading(true);
+    try {
+      const result = await addVehicle({
+        vehicle_id: vehicleData.vehicle_id,
+        driver: vehicleData.driver,
+        lat: vehicleData.lat,
+        lng: vehicleData.lng,
+        location: vehicleData.location,
+        status: 'idle',
+        speed: 0
+      });
+
+      if (result) {
+        toast({
+          title: "✅ Vehicle Added Successfully!",
+          description: `Vehicle ${vehicleData.vehicle_id} has been added at ${vehicleData.location}`,
+          duration: 3000,
+        });
+        
+        setShowQuickAddVehicleModal(false);
+        setQuickAddSelectedLocation(null);
+        await loadVehiclesAndPackages(); // Refresh data
+      } else {
+        throw new Error('Failed to add vehicle');
+      }
+    } catch (error) {
+      console.error('Failed to add vehicle:', error);
+      toast({
+        title: "❌ Failed to Add Vehicle",
+        description: error instanceof Error ? error.message : 'An error occurred',
+        variant: "destructive",
+        duration: 5000,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Quick add package submission  
+  const handleQuickAddPackage = async (packageData: {
+    package_id: string;
+    vehicle_id: string;
+    destination: string;
+    destination_lat: number;
+    destination_lng: number;
+    weight: number;
+    priority: 'low' | 'medium' | 'high';
+    recipient_name: string;
+    package_type: string;
+  }) => {
+    setLoading(true);
+    try {
+      const result = await addPackage({
+        package_id: packageData.package_id,
+        vehicle_id: packageData.vehicle_id,
+        destination: packageData.destination,
+        destination_lat: packageData.destination_lat,
+        destination_lng: packageData.destination_lng,
+        weight: packageData.weight,
+        priority: packageData.priority,
+        recipient_name: packageData.recipient_name,
+        package_type: packageData.package_type
+      });
+
+      if (result) {
+        toast({
+          title: "✅ Package Added Successfully!",
+          description: `Package ${packageData.package_id} has been assigned to vehicle ${packageData.vehicle_id}`,
+          duration: 3000,
+        });
+        
+        setShowQuickAddPackageModal(false);
+        setQuickAddSelectedLocation(null);
+        await loadVehiclesAndPackages(); // Refresh data
+      } else {
+        throw new Error('Failed to add package');
+      }
+    } catch (error) {
+      console.error('Failed to add package:', error);
+      toast({
+        title: "❌ Failed to Add Package",
+        description: error instanceof Error ? error.message : 'An error occurred',
+        variant: "destructive",
+        duration: 5000,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Toggle routes
   const toggleRoutes = () => {
     console.log('🔄 toggleRoutes called, current showRoutes:', showRoutes);
@@ -1615,7 +1759,7 @@ export default function FleetLinkApp() {
                 ))}
               </div>
 
-              {/* Stats */}
+              {/* Stats and Quick Actions */}
               <div className="flex items-center space-x-4 text-sm">
                 <div className="flex items-center space-x-2">
                   <span className="text-slate-500">Vehicles:</span>
@@ -1625,6 +1769,65 @@ export default function FleetLinkApp() {
                   <span className="text-slate-500">Packages:</span>
                   <span className="font-semibold text-slate-800">{allPackages.length}</span>
                 </div>
+                
+                {/* Quick Action Buttons */}
+                <div className="flex items-center space-x-2 border-l border-slate-300 pl-4">
+                  <button
+                    onClick={() => handleMapPickerToggle(
+                      true, 
+                      (location) => {
+                        // Quick add vehicle mode - show modal after location selection
+                        setQuickAddSelectedLocation(location);
+                        setShowQuickAddVehicleModal(true);
+                      },
+                      'vehicle',
+                      'Click on the map to add a vehicle at that location'
+                    )}
+                    className="px-3 py-2 text-xs font-medium rounded-lg bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 hover:from-blue-200 hover:to-blue-300 transition-all flex items-center gap-2 shadow-sm border border-blue-300"
+                    title="Click map to add vehicle at that location"
+                  >
+                    <span className="text-base">🚛</span>
+                    <span className="font-semibold">Quick Add</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (vehicles.length === 0) {
+                        toast({
+                          title: "No vehicles available",
+                          description: "Add a vehicle first before creating packages",
+                          variant: "destructive"
+                        });
+                        return;
+                      }
+                      handleMapPickerToggle(
+                        true, 
+                        (location) => {
+                          // Quick add package mode - show modal after location selection
+                          setQuickAddSelectedLocation(location);
+                          setShowQuickAddPackageModal(true);
+                        },
+                        'package',
+                        'Click on the map to add a package delivery at that location'
+                      );
+                    }}
+                    className={`px-3 py-2 text-xs font-medium rounded-lg transition-all flex items-center gap-2 shadow-sm border ${
+                      vehicles.length === 0 
+                        ? 'bg-gray-100 text-gray-500 border-gray-300 cursor-not-allowed' 
+                        : 'bg-gradient-to-r from-orange-100 to-orange-200 text-orange-800 hover:from-orange-200 hover:to-orange-300 border-orange-300'
+                    }`}
+                    title={vehicles.length === 0 ? "Add vehicles first" : "Click map to add package delivery at that location"}
+                    disabled={vehicles.length === 0}
+                  >
+                    <span className="text-base">📦</span>
+                    <span className="font-semibold">Quick Add</span>
+                    {vehicles.length === 0 && (
+                      <span className="ml-1 px-1.5 py-0.5 text-xs bg-gray-200 text-gray-600 rounded-full">
+                        No vehicles
+                      </span>
+                    )}
+                  </button>
+                </div>
+                
                 <button
                   onClick={toggleRoutes}
                   className={`px-3 py-1 text-xs font-medium rounded-lg transition-all ${
@@ -1645,7 +1848,8 @@ export default function FleetLinkApp() {
 
       {/* Main Content Panel */}
       <div className={`absolute top-24 left-6 transition-all duration-500 ease-out ${
-        isFleetPanelCollapsed ? 'w-16' : 'w-80'
+        isFleetPanelCollapsed ? 'w-16' : 
+        (activeSection === 'add-vehicle' || activeSection === 'add-packages') ? 'w-96' : 'w-80'
       }`}>
         <div className="bg-white/30 backdrop-blur-2xl border border-white/20 rounded-2xl shadow-2xl shadow-black/10 h-[calc(100vh-8rem)]">
           {/* Collapse Button */}
@@ -1735,36 +1939,73 @@ export default function FleetLinkApp() {
                             
                             {/* Show simulation progress if vehicle is being simulated */}
                             {simulationStates.get(vehicle.vehicle_id)?.isActive && (
-                              <div className="mt-3">
-                                <div className="flex justify-between text-xs text-slate-600 mb-1">
-                                  <span>Route Progress</span>
-                                  <span>{Math.round((simulationStates.get(vehicle.vehicle_id)?.routeProgress || 0) * 100)}%</span>
+                              <div className="mt-3 space-y-3">
+                                {/* Route Progress */}
+                                <div>
+                                  <div className="flex justify-between text-xs text-slate-600 mb-1">
+                                    <span>🗺️ Route Progress</span>
+                                    <span>{Math.round((simulationStates.get(vehicle.vehicle_id)?.routeProgress || 0) * 100)}%</span>
+                                  </div>
+                                  <div className="w-full bg-white/50 rounded-full h-2">
+                                    <div
+                                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                                      style={{ width: `${(simulationStates.get(vehicle.vehicle_id)?.routeProgress || 0) * 100}%` }}
+                                    />
+                                  </div>
                                 </div>
-                                <div className="w-full bg-white/50 rounded-full h-2">
-                                  <div
-                                    className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                                    style={{ width: `${(simulationStates.get(vehicle.vehicle_id)?.routeProgress || 0) * 100}%` }}
-                                  />
-                                </div>
-                                <div className="flex justify-between text-xs text-slate-600 mt-1">
-                                  <span>Packages Delivered</span>
-                                  <span>{simulationStates.get(vehicle.vehicle_id)?.deliveredPackages?.length || 0} / {vehicle.deliveryRoute?.waypoints?.length || 0}</span>
+                                
+                                {/* Package Delivery Progress */}
+                                <div>
+                                  <div className="flex justify-between text-xs text-slate-600 mb-1">
+                                    <span>📦 Packages Delivered</span>
+                                    <span>{simulationStates.get(vehicle.vehicle_id)?.deliveredPackages?.length || 0} / {vehicle.packages?.length || 0}</span>
+                                  </div>
+                                  <div className="w-full bg-white/50 rounded-full h-2">
+                                    <div
+                                      className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                                      style={{ 
+                                        width: `${vehicle.packages?.length ? 
+                                          ((simulationStates.get(vehicle.vehicle_id)?.deliveredPackages?.length || 0) / vehicle.packages.length) * 100 : 0}%` 
+                                      }}
+                                    />
+                                  </div>
                                 </div>
                               </div>
                             )}
                             
                             {vehicle.progress !== undefined && !simulationStates.get(vehicle.vehicle_id)?.isActive && (
-                              <div className="mt-3">
-                                <div className="flex justify-between text-xs text-slate-600 mb-1">
-                                  <span>Progress</span>
-                                  <span>{vehicle.progress}%</span>
+                              <div className="mt-3 space-y-3">
+                                {/* Static Route Progress */}
+                                <div>
+                                  <div className="flex justify-between text-xs text-slate-600 mb-1">
+                                    <span>🗺️ Route Progress</span>
+                                    <span>{vehicle.progress}%</span>
+                                  </div>
+                                  <div className="w-full bg-white/50 rounded-full h-2">
+                                    <div
+                                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                                      style={{ width: `${vehicle.progress}%` }}
+                                    />
+                                  </div>
                                 </div>
-                                <div className="w-full bg-white/50 rounded-full h-2">
-                                  <div
-                                    className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                                    style={{ width: `${vehicle.progress}%` }}
-                                  />
-                                </div>
+                                
+                                {/* Static Package Progress */}
+                                {vehicle.packages && vehicle.packages.length > 0 && (
+                                  <div>
+                                    <div className="flex justify-between text-xs text-slate-600 mb-1">
+                                      <span>📦 Package Status</span>
+                                      <span>{vehicle.packages.filter(pkg => pkg.status === 'delivered').length} / {vehicle.packages.length}</span>
+                                    </div>
+                                    <div className="w-full bg-white/50 rounded-full h-2">
+                                      <div
+                                        className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                                        style={{ 
+                                          width: `${(vehicle.packages.filter(pkg => pkg.status === 'delivered').length / vehicle.packages.length) * 100}%` 
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1783,6 +2024,7 @@ export default function FleetLinkApp() {
                     loadVehiclesAndPackages()
                     setActiveSection('fleet')
                   }}
+                  onMapPickerToggle={handleMapPickerToggle}
                 />
               )}
 
@@ -1795,6 +2037,7 @@ export default function FleetLinkApp() {
                     loadVehiclesAndPackages()
                     setActiveSection('fleet')
                   }}
+                  onMapPickerToggle={handleMapPickerToggle}
                 />
               )}
 
@@ -2057,6 +2300,45 @@ export default function FleetLinkApp() {
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Map Location Picker */}
+      <MapLocationPicker
+        map={map.current}
+        isActive={isMapPickerActive}
+        onLocationSelect={handleMapPickerLocationSelect}
+        onCancel={handleMapPickerCancel}
+        mapboxToken={mapboxToken}
+        mode={mapPickerMode}
+        title={mapPickerTitle}
+      />
+      
+      {/* Quick Add Modals */}
+      {quickAddSelectedLocation && (
+        <>
+          <QuickAddVehicleModal
+            isOpen={showQuickAddVehicleModal}
+            onClose={() => {
+              setShowQuickAddVehicleModal(false);
+              setQuickAddSelectedLocation(null);
+            }}
+            selectedLocation={quickAddSelectedLocation}
+            onSubmit={handleQuickAddVehicle}
+            isLoading={loading}
+          />
+          
+          <QuickAddPackageModal
+            isOpen={showQuickAddPackageModal}
+            onClose={() => {
+              setShowQuickAddPackageModal(false);
+              setQuickAddSelectedLocation(null);
+            }}
+            selectedLocation={quickAddSelectedLocation}
+            vehicles={vehicles}
+            onSubmit={handleQuickAddPackage}
+            isLoading={loading}
+          />
+        </>
       )}
       
       {/* Local Testing Indicator */}

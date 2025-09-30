@@ -6,10 +6,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { toast } from '@/hooks/use-toast'
 import { addVehicle, geocodeAddress } from '@/lib/local-api'
 import { LocationFinder } from '../common/LocationFinder'
+import { MapPin, Target } from 'lucide-react'
 
 interface AddVehicleTabProps {
   mapboxToken: string
   onVehicleAdded?: () => void
+  onMapPickerToggle?: (
+    active: boolean, 
+    onLocationSelect: (location: { address: string; lat: number; lng: number }) => void,
+    mode?: 'vehicle' | 'package' | 'general',
+    title?: string
+  ) => void
 }
 
 interface NewVehicle {
@@ -20,7 +27,7 @@ interface NewVehicle {
   lng?: number
 }
 
-export function AddVehicleTab({ mapboxToken, onVehicleAdded }: AddVehicleTabProps) {
+export function AddVehicleTab({ mapboxToken, onVehicleAdded, onMapPickerToggle }: AddVehicleTabProps) {
   const [newVehicle, setNewVehicle] = useState<NewVehicle>({
     vehicle_id: '',
     driver: '',
@@ -41,6 +48,12 @@ export function AddVehicleTab({ mapboxToken, onVehicleAdded }: AddVehicleTabProp
       console.log('🚛 AddVehicleTab: Updated newVehicle:', updated)
       return updated
     })
+  }
+
+  const handleMapPickerClick = () => {
+    if (onMapPickerToggle) {
+      onMapPickerToggle(true, handleLocationSelect, 'vehicle', 'Choose vehicle starting location on the map')
+    }
   }
 
   const handleAddVehicle = async (e: React.FormEvent) => {
@@ -136,15 +149,16 @@ export function AddVehicleTab({ mapboxToken, onVehicleAdded }: AddVehicleTabProp
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          🚛 Add Vehicle
-        </CardTitle>
-        <CardDescription>
-          Add a new vehicle to your fleet with precise location
-        </CardDescription>
-      </CardHeader>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            🚛 Add Vehicle
+          </CardTitle>
+          <CardDescription>
+            Add a new vehicle to your fleet with precise location
+          </CardDescription>
+        </CardHeader>
       <CardContent>
         <form onSubmit={handleAddVehicle} className="space-y-4">
           <div className="space-y-2">
@@ -171,12 +185,28 @@ export function AddVehicleTab({ mapboxToken, onVehicleAdded }: AddVehicleTabProp
 
           <div className="space-y-2">
             <Label htmlFor="location">Starting Location</Label>
-            <LocationFinder
-              mapboxToken={mapboxToken}
-              placeholder="Enter address or location..."
-              onLocationSelect={handleLocationSelect}
-              value={newVehicle.location}
-            />
+            <div className="space-y-3">
+              <LocationFinder
+                mapboxToken={mapboxToken}
+                placeholder="Enter USA address (e.g., 123 Main St, San Francisco CA)"
+                onLocationSelect={handleLocationSelect}
+                value={newVehicle.location}
+              />
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-px bg-slate-200"></div>
+                <span className="text-xs text-slate-500 px-2">or</span>
+                <div className="flex-1 h-px bg-slate-200"></div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleMapPickerClick}
+                className="w-full flex items-center gap-2"
+              >
+                <Target className="h-4 w-4" />
+                Pick location on map
+              </Button>
+            </div>
           </div>
 
           <Button 
@@ -189,5 +219,7 @@ export function AddVehicleTab({ mapboxToken, onVehicleAdded }: AddVehicleTabProp
         </form>
       </CardContent>
     </Card>
+
+  </>
   )
 }

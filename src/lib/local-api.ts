@@ -327,8 +327,18 @@ export async function getAllDeliveryRoutes(): Promise<DeliveryRoute[]> {
 
 export async function geocodeAddress(address: string, mapboxToken: string): Promise<{lat: number, lng: number} | null> {
   try {
+    // Enhanced geocoding with USA focus and better accuracy
+    const params = new URLSearchParams({
+      access_token: mapboxToken,
+      limit: '1',
+      types: 'address,poi,place,locality,neighborhood',
+      country: 'us', // Restrict to USA only
+      proximity: '-98.5795,39.8283', // Geographic center of USA
+      language: 'en'
+    })
+
     const response = await fetch(
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${mapboxToken}&limit=1&types=place,locality,neighborhood,address`
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?${params}`
     )
     
     if (!response.ok) {
@@ -338,9 +348,18 @@ export async function geocodeAddress(address: string, mapboxToken: string): Prom
     const data = await response.json()
     
     if (data.features && data.features.length > 0) {
-      const [lng, lat] = data.features[0].center
-      console.log('🗺️ [LOCAL] Geocoded address:', address, '→', { lat, lng })
-      return { lat, lng }
+      // Verify the result is in USA
+      const feature = data.features[0]
+      const country = feature.context?.find((c: any) => c.id.startsWith('country'))
+      
+      if (country?.short_code === 'us' || country?.text === 'United States') {
+        const [lng, lat] = feature.center
+        console.log('🗺️ [LOCAL] Geocoded USA address:', address, '→', { lat, lng })
+        return { lat, lng }
+      } else {
+        console.warn('🗺️ [LOCAL] Address not in USA:', address)
+        return null
+      }
     }
     
     return null
