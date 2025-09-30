@@ -1,0 +1,56 @@
+#!/bin/bash
+
+echo "🧪 FleetLink Local Testing Script"
+echo "================================="
+
+# Check if the app is running
+if curl -s http://localhost:8081 > /dev/null; then
+    echo "✅ App is running on http://localhost:8081"
+else
+    echo "❌ App is not running. Please run 'npm run dev' first."
+    exit 1
+fi
+
+echo ""
+echo "📝 Manual Testing Checklist:"
+echo "----------------------------"
+echo "1. ✅ Check that 'Local Testing Mode' indicator is visible"
+echo "2. 🚛 Test Add Vehicle functionality:"
+echo "   - Click 'Add Vehicle' button"
+echo "   - Fill in vehicle details (e.g. TRUCK-003, Driver Name, Location)"
+echo "   - Click Submit and verify vehicle appears on map and in list"
+echo ""
+echo "3. 📦 Test Add Package functionality:"
+echo "   - Click 'Add Package' button"
+echo "   - Fill in package details and select a vehicle"
+echo "   - Click Submit and verify package appears in vehicle details"
+echo ""
+echo "4. 🗺️ Test Route Generation:"
+echo "   - Select a vehicle with packages"
+echo "   - Click 'Generate Route' button"
+echo "   - Verify route line appears on map connecting all destinations"
+echo ""
+echo "5. 🏁 Test Simulation:"
+echo "   - Click 'Start Simulation' button"
+echo "   - Verify vehicles move along routes and package statuses update"
+echo ""
+echo "6. 🎯 Test Map Features:"
+echo "   - Zoom in/out and pan around the map"
+echo "   - Click on vehicle markers to see details"
+echo "   - Verify checkpoints/waypoints are visible on routes"
+echo ""
+echo "Expected Results:"
+echo "----------------"
+echo "✅ All add operations should work without errors"
+echo "✅ Data should persist during the session"
+echo "✅ Routes should show actual road paths with MapBox"
+echo "✅ Real-time updates should work (new vehicles/packages appear immediately)"
+echo "✅ Console should show '[LOCAL]' prefixed log messages"
+echo ""
+echo "🔍 Check browser console (F12) for detailed logs"
+echo "📊 Test with sample data:"
+echo "  Vehicle: TRUCK-TEST, Driver: Test Driver, Location: San Francisco, CA"
+echo "  Package: PKG-TEST, Destination: Oakland, CA, Weight: 10 lbs"
+
+echo ""
+echo "Happy testing! 🚀"
