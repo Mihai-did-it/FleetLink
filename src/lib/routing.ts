@@ -95,7 +95,7 @@ export async function getOptimizedRoute(
   }
 
   // For routes with close waypoints, don't use optimization to avoid 422 errors
-  const useOptimization = filteredCoordinates.length > 2 && filteredCoordinates.length <= 10;
+  const useOptimization = false; // Disable optimization to prevent 422 errors
 
   // Format coordinates for Mapbox API (lng,lat;lng,lat;...)
   const coordinatesString = filteredCoordinates
@@ -114,13 +114,12 @@ export async function getOptimizedRoute(
     access_token: mapboxToken
   });
 
-  // NEVER use optimization for 3+ waypoints if there are close coordinates
-  const hasCloseCoordinates = coordinates.length !== filteredCoordinates.length;
-  if (useOptimization && !hasCloseCoordinates) {
+  // NEVER use optimization - it causes 422 errors with multiple waypoints
+  if (useOptimization) {
     params.append('optimize', 'true');
-    console.log('🔄 Using route optimization for', filteredCoordinates.length, 'waypoints');
+    console.log('🔄 Using route optimization');
   } else {
-    console.log('⚠️ Skipping optimization for', filteredCoordinates.length, 'waypoints', hasCloseCoordinates ? '(has close coordinates)' : '');
+    console.log('⚠️ Optimization disabled to prevent 422 errors');
   }
 
   const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${coordinatesString}?${params}`;
