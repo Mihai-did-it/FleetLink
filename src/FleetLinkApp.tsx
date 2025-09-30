@@ -28,6 +28,8 @@ import {
 import { type VehicleWithPackages } from './types'
 import { AddVehicleTab } from './components/tabs/AddVehicleTab'
 import { AddPackageTab } from './components/tabs/AddPackageTab'
+import { useToast } from '@/hooks/use-toast'
+import { Toaster } from '@/components/ui/toaster'
 
 // Types
 interface NewVehicle {
@@ -61,6 +63,31 @@ export default function FleetLinkApp() {
   const [showRoutes, setShowRoutes] = useState(true); // Default to ON - routes visible by default
   const [failedVehicles, setFailedVehicles] = useState<Set<string>>(new Set()); // Persistent failed vehicle tracking
   const [loading, setLoading] = useState(false);
+  
+  // Simulation states
+  const [simulationState, setSimulationState] = useState<{
+    [vehicleId: string]: {
+      isActive: boolean;
+      currentPosition: [number, number];
+      routeProgress: number; // 0-1, percentage through route
+      speed: number; // km/h
+      currentSpeed: number; // current actual speed
+      deliveredPackages: string[];
+      animationFrame?: number;
+      lastUpdateTime?: number;
+      fastForward: number; // 1x, 2x, 4x, 8x speed multiplier
+    }
+  }>({});
+  
+  // Toast notifications
+  const { toast } = useToast();
+  
+  // Recent delivery notifications
+  const [recentDeliveries, setRecentDeliveries] = useState<{
+    vehicleId: string;
+    destination: string;
+    timestamp: number;
+  }[]>([]);
   
   // Form states
   const [newVehicle, setNewVehicle] = useState<NewVehicle>({ id: '', driver: '', location: '' });
@@ -98,6 +125,48 @@ export default function FleetLinkApp() {
     });
 
     map.current.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
+
+    // Add speed label layers when map loads
+    map.current.on('load', () => {
+      if (!map.current) return;
+      
+      // Add speed label source and layer for each vehicle
+      vehicles.forEach(vehicle => {
+        const speedLabelId = `speed-${vehicle.vehicle_id}`;
+        
+        if (!map.current!.getSource(speedLabelId)) {
+          map.current!.addSource(speedLabelId, {
+            type: 'geojson',
+            data: {
+              type: 'Feature',
+              properties: { speed: '0 km/h' },
+              geometry: {
+                type: 'Point',
+                coordinates: [vehicle.lng || 0, vehicle.lat || 0]
+              }
+            }
+          });
+
+          map.current!.addLayer({
+            id: speedLabelId,
+            type: 'symbol',
+            source: speedLabelId,
+            layout: {
+              'text-field': ['get', 'speed'],
+              'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+              'text-size': 12,
+              'text-offset': [0, -2],
+              'text-anchor': 'bottom'
+            },
+            paint: {
+              'text-color': '#ffffff',
+              'text-halo-color': '#000000',
+              'text-halo-width': 1
+            }
+          });
+        }
+      });
+    });
 
     return () => {
       if (map.current) {
@@ -143,6 +212,18 @@ export default function FleetLinkApp() {
       vehicleSubscription.unsubscribe();
       packageSubscription.unsubscribe();
     };
+  }, []);
+
+  // Clean up old delivery notifications
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setRecentDeliveries(prev => prev.filter(delivery => 
+        now - delivery.timestamp < 10000 // Keep for 10 seconds
+      ));
+    }, 1000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const loadVehiclesAndPackages = async () => {
@@ -335,6 +416,373 @@ export default function FleetLinkApp() {
     const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#F97316'];
     const index = vehicleId.charCodeAt(vehicleId.length - 1) % colors.length;
     return colors[index];
+  };
+
+  // Vehicle Simulation Functions
+  const startVehicleSimulation = (vehicle: VehicleWithPackages) => {
+    if (!vehicle.deliveryRoute?.route_geometry) {
+      console.warn('No route geometry available for simulation');
+      return;
+    }
+
+    const vehicleId = vehicle.vehicle_id;
+    const routeCoordinates = vehicle.deliveryRoute.route_geometry.coordinates;
+    
+    console.log(`🚀 Starting simulation for ${vehicleId}`);
+    
+    // Initialize simulation state with realistic base speed
+    setSimulationState(prev => ({
+      ...prev,
+      [vehicleId]: {
+        isActive: true,
+        currentPosition: routeCoordinates[0],
+        routeProgress: 0,
+        speed: 35, // Base speed 35 mph (realistic city driving)
+        currentSpeed: 0,
+        deliveredPackages: [],
+        lastUpdateTime: Date.now(),
+        fastForward: 1
+      }
+    }));
+
+    // Start animation
+    animateVehicle(vehicleId, routeCoordinates, vehicle);
+  };
+
+  const stopVehicleSimulation = (vehicleId: string) => {
+    console.log(`⏹️ Stopping simulation for ${vehicleId}`);
+    
+    setSimulationState(prev => {
+      const newState = { ...prev };
+      if (newState[vehicleId]) {
+        if (newState[vehicleId].animationFrame) {
+          cancelAnimationFrame(newState[vehicleId].animationFrame!);
+        }
+        newState[vehicleId].isActive = false;
+        newState[vehicleId].currentSpeed = 0;
+        
+        // Hide speed label when stopped
+        updateVehicleMarker(vehicleId, newState[vehicleId].currentPosition, 0);
+      }
+      return newState;
+    });
+  };
+
+  const setSimulationSpeed = (vehicleId: string, fastForward: number) => {
+    setSimulationState(prev => ({
+      ...prev,
+      [vehicleId]: {
+        ...prev[vehicleId],
+        fastForward
+      }
+    }));
+  };
+
+  const animateVehicle = (vehicleId: string, routeCoordinates: [number, number][], vehicle: VehicleWithPackages) => {
+    const updatePosition = () => {
+      setSimulationState(prev => {
+        const vehicleState = prev[vehicleId];
+        if (!vehicleState || !vehicleState.isActive) return prev;
+
+        const now = Date.now();
+        const realDeltaTime = (now - (vehicleState.lastUpdateTime || now)) / 1000; // real seconds
+        const simulationDeltaTime = realDeltaTime * vehicleState.fastForward; // simulation time
+        
+        // Realistic speed variation based on route segment
+        const baseSpeed = 35; // mph
+        const currentRealisticSpeed = getRealisticSpeed(vehicleState.routeProgress, baseSpeed);
+        
+        // Convert mph to km/s for distance calculation
+        const speedKmH = currentRealisticSpeed * 1.60934; // Convert mph to km/h
+        const distancePerSecond = speedKmH / 3600; // km/s
+        
+        // Calculate new position along route
+        const totalDistance = calculateRouteDistance(routeCoordinates);
+        const distanceToTravel = distancePerSecond * simulationDeltaTime; // km
+        const progressIncrement = distanceToTravel / totalDistance;
+        
+        const newProgress = Math.min(vehicleState.routeProgress + progressIncrement, 1);
+        const newPosition = interpolatePosition(routeCoordinates, newProgress);
+        
+        // Check for package deliveries
+        const deliveredPackages = checkPackageDeliveries(vehicle, newProgress);
+        const previouslyDelivered = vehicleState.deliveredPackages || [];
+        
+        // Detect new deliveries
+        const newDeliveries = deliveredPackages.filter(packageId => 
+          !previouslyDelivered.includes(packageId)
+        );
+        
+        // Show toast notifications for new deliveries
+        if (newDeliveries.length > 0) {
+          console.log(`🎉 New deliveries detected for ${vehicleId}:`, newDeliveries);
+          newDeliveries.forEach(packageId => {
+            const packageInfo = vehicle.packages.find(p => p.package_id === packageId);
+            if (packageInfo) {
+              console.log(`📦 Showing toast for package ${packageId} to ${packageInfo.destination}`);
+              
+              // Show toast notification
+              toast({
+                title: "📦 Package Delivered!",
+                description: `Vehicle ${vehicleId} delivered package to ${packageInfo.destination}`,
+                duration: 5000,
+              });
+              
+              // Add to recent deliveries for banner notification
+              setRecentDeliveries(prev => [...prev, {
+                vehicleId,
+                destination: packageInfo.destination,
+                timestamp: Date.now()
+              }]);
+              
+              // Add temporary delivery marker on map
+              addDeliveryAnimation(newPosition, packageInfo.destination);
+            }
+          });
+        }
+        
+        const newState = {
+          ...vehicleState,
+          routeProgress: newProgress,
+          currentPosition: newPosition,
+          currentSpeed: currentRealisticSpeed, // Display actual vehicle speed, not simulation speed
+          deliveredPackages,
+          lastUpdateTime: now
+        };
+
+        // Update vehicle marker on map with current speed
+        updateVehicleMarker(vehicleId, newPosition, currentRealisticSpeed);
+        
+        // Check if simulation is complete
+        if (newProgress >= 1) {
+          console.log(`🏁 Simulation complete for ${vehicleId}`);
+          newState.isActive = false;
+          newState.currentSpeed = 0;
+          updateVehicleMarker(vehicleId, newPosition, 0);
+        } else {
+          // Continue animation
+          newState.animationFrame = requestAnimationFrame(updatePosition);
+        }
+
+        return { ...prev, [vehicleId]: newState };
+      });
+    };
+
+    // Start the animation loop
+    requestAnimationFrame(updatePosition);
+  };
+
+  // Get realistic speed based on route progress (mph)
+  const getRealisticSpeed = (progress: number, baseSpeed: number): number => {
+    // Simulate realistic speed variations:
+    // - Start slow (accelerating from stop)
+    // - Vary speed based on route segment
+    // - Slow down for turns and intersections
+    
+    if (progress < 0.05) {
+      // Starting acceleration
+      return baseSpeed * 0.3 + (baseSpeed * 0.7 * progress / 0.05);
+    } else if (progress > 0.95) {
+      // Slowing down to end
+      return baseSpeed * (1 - (progress - 0.95) / 0.05 * 0.7);
+    } else {
+      // Normal driving with variation
+      const variation = Math.sin(progress * Math.PI * 8) * 0.2; // Random-ish variation
+      return baseSpeed + (baseSpeed * variation * 0.3);
+    }
+  };
+
+  // Check if any packages should be delivered at current progress
+  const checkPackageDeliveries = (vehicle: VehicleWithPackages, progress: number): string[] => {
+    const deliveryPoints = vehicle.packages.length;
+    if (deliveryPoints === 0) return [];
+    
+    const progressPerDelivery = 1 / deliveryPoints;
+    const currentDeliveryIndex = Math.floor(progress / progressPerDelivery);
+    const deliveredPackages: string[] = [];
+    
+    console.log(`🚚 Vehicle ${vehicle.vehicle_id}: progress=${progress.toFixed(3)}, deliveryIndex=${currentDeliveryIndex}/${deliveryPoints}`);
+    
+    for (let i = 0; i < Math.min(currentDeliveryIndex, deliveryPoints); i++) {
+      if (vehicle.packages[i]) {
+        deliveredPackages.push(vehicle.packages[i].package_id);
+        console.log(`📦 Package ${vehicle.packages[i].package_id} marked for delivery to ${vehicle.packages[i].destination}`);
+      }
+    }
+    
+    return deliveredPackages;
+  };
+
+  // Add temporary delivery animation on map
+  const addDeliveryAnimation = (position: [number, number], destination: string) => {
+    if (!map.current) return;
+    
+    // Create a temporary delivery marker
+    const deliveryMarker = new mapboxgl.Marker({
+      element: createDeliveryMarkerElement(),
+      anchor: 'center'
+    })
+    .setLngLat(position)
+    .addTo(map.current);
+    
+    // Remove the marker after 3 seconds
+    setTimeout(() => {
+      deliveryMarker.remove();
+    }, 3000);
+  };
+  
+  // Create delivery marker element
+  const createDeliveryMarkerElement = () => {
+    const el = document.createElement('div');
+    el.className = 'delivery-animation';
+    el.innerHTML = '📦';
+    el.style.cssText = `
+      font-size: 24px;
+      animation: deliveryPulse 3s ease-in-out;
+      pointer-events: none;
+    `;
+    
+    // Add CSS animation if not already added
+    if (!document.getElementById('delivery-animation-styles')) {
+      const style = document.createElement('style');
+      style.id = 'delivery-animation-styles';
+      style.textContent = `
+        @keyframes deliveryPulse {
+          0% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.5); opacity: 0.8; }
+          100% { transform: scale(2); opacity: 0; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    return el;
+  };
+
+  const updateVehicleMarker = (vehicleId: string, position: [number, number], speedMph: number) => {
+    if (!map.current) return;
+
+    const markerId = `vehicle-${vehicleId}`;
+    const speedLabelId = `speed-${vehicleId}`;
+    
+    // Update vehicle position
+    if (map.current.getSource(markerId)) {
+      (map.current.getSource(markerId) as mapboxgl.GeoJSONSource).setData({
+        type: 'Feature',
+        properties: { vehicleId, speed: Math.round(speedMph) },
+        geometry: {
+          type: 'Point',
+          coordinates: position
+        }
+      });
+    }
+
+    // Update or create speed label (show speed only if > 0)
+    const speedText = speedMph > 0 ? `${Math.round(speedMph)} mph` : '';
+    
+    if (map.current.getSource(speedLabelId)) {
+      (map.current.getSource(speedLabelId) as mapboxgl.GeoJSONSource).setData({
+        type: 'Feature',
+        properties: { speed: speedText },
+        geometry: {
+          type: 'Point',
+          coordinates: position
+        }
+      });
+    } else if (speedMph > 0) {
+      // Create speed label if it doesn't exist and vehicle is moving
+      map.current.addSource(speedLabelId, {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: { speed: speedText },
+          geometry: {
+            type: 'Point',
+            coordinates: position
+          }
+        }
+      });
+
+      map.current.addLayer({
+        id: speedLabelId,
+        type: 'symbol',
+        source: speedLabelId,
+        layout: {
+          'text-field': ['get', 'speed'],
+          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+          'text-size': 12,
+          'text-offset': [0, -2],
+          'text-anchor': 'bottom'
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-halo-color': '#000000',
+          'text-halo-width': 1
+        }
+      });
+    }
+
+    // Update the physical marker position too
+    if (markers.current[vehicleId]) {
+      markers.current[vehicleId].setLngLat(position);
+    }
+  };
+
+  // Helper functions for simulation
+  const calculateRouteDistance = (coordinates: [number, number][]): number => {
+    let totalDistance = 0;
+    for (let i = 1; i < coordinates.length; i++) {
+      totalDistance += calculateDistance(coordinates[i-1], coordinates[i]);
+    }
+    return totalDistance;
+  };
+
+  const calculateDistance = (coord1: [number, number], coord2: [number, number]): number => {
+    const [lng1, lat1] = coord1;
+    const [lng2, lat2] = coord2;
+    
+    const toRad = (deg: number) => deg * (Math.PI / 180);
+    const R = 6371; // Earth's radius in kilometers
+    
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+    
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c; // Distance in kilometers
+  };
+
+  const interpolatePosition = (coordinates: [number, number][], progress: number): [number, number] => {
+    if (progress <= 0) return coordinates[0];
+    if (progress >= 1) return coordinates[coordinates.length - 1];
+    
+    const totalDistance = calculateRouteDistance(coordinates);
+    const targetDistance = totalDistance * progress;
+    
+    let currentDistance = 0;
+    
+    for (let i = 1; i < coordinates.length; i++) {
+      const segmentDistance = calculateDistance(coordinates[i-1], coordinates[i]);
+      
+      if (currentDistance + segmentDistance >= targetDistance) {
+        // Interpolate within this segment
+        const segmentProgress = (targetDistance - currentDistance) / segmentDistance;
+        const [lng1, lat1] = coordinates[i-1];
+        const [lng2, lat2] = coordinates[i];
+        
+        return [
+          lng1 + (lng2 - lng1) * segmentProgress,
+          lat1 + (lat2 - lat1) * segmentProgress
+        ];
+      }
+      
+      currentDistance += segmentDistance;
+    }
+    
+    return coordinates[coordinates.length - 1];
   };
 
   // Generate route for a specific vehicle
@@ -990,6 +1438,23 @@ export default function FleetLinkApp() {
             </div>
           </div>
         </div>
+        
+        {/* Delivery Notification Banner */}
+        {recentDeliveries.length > 0 && (
+          <div className="bg-green-500 text-white px-6 py-3 animate-pulse">
+            <div className="flex items-center justify-center space-x-2">
+              <span className="text-lg">📦</span>
+              <span className="font-medium">
+                Package delivered! Vehicle {recentDeliveries[0].vehicleId} → {recentDeliveries[0].destination}
+              </span>
+              {recentDeliveries.length > 1 && (
+                <span className="text-green-100 text-sm">
+                  (+{recentDeliveries.length - 1} more)
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main Content Panel */}
@@ -1082,7 +1547,27 @@ export default function FleetLinkApp() {
                               </div>
                             )}
                             
-                            {vehicle.progress !== undefined && (
+                            {/* Show simulation progress if vehicle is being simulated */}
+                            {simulationState[vehicle.vehicle_id]?.isActive && (
+                              <div className="mt-3">
+                                <div className="flex justify-between text-xs text-slate-600 mb-1">
+                                  <span>Route Progress</span>
+                                  <span>{Math.round((simulationState[vehicle.vehicle_id]?.routeProgress || 0) * 100)}%</span>
+                                </div>
+                                <div className="w-full bg-white/50 rounded-full h-2">
+                                  <div
+                                    className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${(simulationState[vehicle.vehicle_id]?.routeProgress || 0) * 100}%` }}
+                                  />
+                                </div>
+                                <div className="flex justify-between text-xs text-slate-600 mt-1">
+                                  <span>Packages Delivered</span>
+                                  <span>{simulationState[vehicle.vehicle_id]?.deliveredPackages?.length || 0} / {vehicle.deliveryRoute?.waypoints?.length || 0}</span>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {vehicle.progress !== undefined && !simulationState[vehicle.vehicle_id]?.isActive && (
                               <div className="mt-3">
                                 <div className="flex justify-between text-xs text-slate-600 mb-1">
                                   <span>Progress</span>
@@ -1182,6 +1667,97 @@ export default function FleetLinkApp() {
                   </div>
                 </div>
               </div>
+
+              {/* Simulation Controls */}
+              {selectedVehicle.deliveryRoute && (
+                <div className="bg-white/40 backdrop-blur-xl rounded-xl p-4 border border-white/30">
+                  <h3 className="text-lg font-semibold text-slate-800 mb-3">Route Simulation</h3>
+                  
+                  {simulationState[selectedVehicle.vehicle_id]?.isActive ? (
+                    <div className="space-y-3">
+                      {/* Simulation Status */}
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-green-800 font-medium">🚛 Simulation Active</span>
+                          <span className="text-green-600 text-sm">
+                            {Math.round((simulationState[selectedVehicle.vehicle_id]?.routeProgress || 0) * 100)}% Complete
+                          </span>
+                        </div>
+                        <div className="text-sm text-green-700">
+                          Speed: {Math.round(simulationState[selectedVehicle.vehicle_id]?.currentSpeed || 0)} mph
+                        </div>
+                        <div className="text-sm text-green-700">
+                          Packages Delivered: {simulationState[selectedVehicle.vehicle_id]?.deliveredPackages?.length || 0} / {selectedVehicle.packages?.length || 0}
+                        </div>
+                      </div>
+
+                      {/* Package Delivery Status */}
+                      {selectedVehicle.packages && selectedVehicle.packages.length > 0 && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                          <h4 className="text-blue-800 font-medium mb-2">📦 Package Status</h4>
+                          <div className="space-y-1 text-sm">
+                            {selectedVehicle.packages.map((pkg, index) => {
+                              const isDelivered = simulationState[selectedVehicle.vehicle_id]?.deliveredPackages?.includes(pkg.package_id);
+                              return (
+                                <div key={pkg.package_id} className="flex items-center justify-between">
+                                  <span className="text-slate-700 truncate">{pkg.destination}</span>
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                    isDelivered 
+                                      ? 'bg-green-100 text-green-800' 
+                                      : 'bg-yellow-100 text-yellow-800'
+                                  }`}>
+                                    {isDelivered ? '✅ Delivered' : '🚚 In Transit'}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Speed Controls */}
+                      <div>
+                        <div className="text-sm text-slate-600 mb-2">Simulation Speed:</div>
+                        <div className="flex space-x-2">
+                          {[1, 2, 4, 8].map(speed => (
+                            <button
+                              key={speed}
+                              onClick={() => setSimulationSpeed(selectedVehicle.vehicle_id, speed)}
+                              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                                (simulationState[selectedVehicle.vehicle_id]?.fastForward || 1) === speed
+                                  ? 'bg-blue-500 text-white'
+                                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                              }`}
+                            >
+                              {speed}x
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Stop Button */}
+                      <button
+                        onClick={() => stopVehicleSimulation(selectedVehicle.vehicle_id)}
+                        className="w-full px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors font-medium"
+                      >
+                        ⏹️ Stop Simulation
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="text-sm text-slate-600 text-center py-2">
+                        Simulate vehicle movement along the delivery route
+                      </div>
+                      <button
+                        onClick={() => startVehicleSimulation(selectedVehicle)}
+                        className="w-full px-4 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-medium"
+                      >
+                        🚀 Start Route Simulation
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {selectedVehicle.deliveryRoute && (
                 <div className="bg-white/40 backdrop-blur-xl rounded-xl p-4 border border-white/30">
@@ -1298,6 +1874,9 @@ export default function FleetLinkApp() {
         <div>With Routes: {vehicles.filter(v => v.deliveryRoute).length}</div>
         <div>MapBox Token: {mapboxToken ? '✅' : '❌'}</div>
       </div>
+      
+      {/* Toast notifications */}
+      <Toaster />
     </div>
   )
 }
