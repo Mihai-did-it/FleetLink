@@ -28,8 +28,6 @@ import {
 import { type VehicleWithPackages } from './types'
 import { AddVehicleTab } from './components/tabs/AddVehicleTab'
 import { AddPackageTab } from './components/tabs/AddPackageTab'
-import { RoutingTab } from './components/tabs/RoutingTab'
-import { SimulationTab } from './components/tabs/SimulationTab'
 
 // Types
 interface NewVehicle {
@@ -58,9 +56,9 @@ export default function FleetLinkApp() {
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleWithPackages | null>(null);
   const [isFleetPanelCollapsed, setIsFleetPanelCollapsed] = useState(false);
   const [showVehicleDrawer, setShowVehicleDrawer] = useState(false);
-  const [activeSection, setActiveSection] = useState<'fleet' | 'add-vehicle' | 'add-packages' | 'simulation' | 'routing'>('fleet');
+  const [activeSection, setActiveSection] = useState<'fleet' | 'add-vehicle' | 'add-packages'>('fleet');
   const [isConnected, setIsConnected] = useState(false);
-  const [showRoutes, setShowRoutes] = useState(false); // Changed from true to false to prevent auto-generation
+  const [showRoutes, setShowRoutes] = useState(true); // Default to ON - routes visible by default
   const [failedVehicles, setFailedVehicles] = useState<Set<string>>(new Set()); // Persistent failed vehicle tracking
   const [loading, setLoading] = useState(false);
   
@@ -952,7 +950,7 @@ export default function FleetLinkApp() {
 
               {/* Navigation Menu */}
               <div className="flex items-center space-x-2">
-                {['fleet', 'add-vehicle', 'add-packages', 'routing', 'simulation'].map((section) => (
+                {['fleet', 'add-vehicle', 'add-packages'].map((section) => (
                   <button
                     key={section}
                     onClick={() => setActiveSection(section as any)}
@@ -963,9 +961,7 @@ export default function FleetLinkApp() {
                     }`}
                   >
                     {section === 'fleet' ? 'Fleet' : 
-                     section === 'add-vehicle' ? 'Add Vehicle' :
-                     section === 'add-packages' ? 'Add Packages' : 
-                     section === 'routing' ? 'Routing' : 'Simulation'}
+                     section === 'add-vehicle' ? 'Add Vehicle' : 'Add Packages'}
                   </button>
                 ))}
               </div>
@@ -1019,6 +1015,20 @@ export default function FleetLinkApp() {
               {activeSection === 'fleet' && (
                 <>
                   <h3 className="text-lg font-semibold text-slate-800 mb-4">Fleet Overview</h3>
+                  
+                  {/* Route Toggle Button */}
+                  <div className="mb-4">
+                    <button
+                      onClick={toggleRoutes}
+                      className={`w-full px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
+                        showRoutes 
+                          ? 'bg-green-500 hover:bg-green-600 text-white' 
+                          : 'bg-blue-500 hover:bg-blue-600 text-white'
+                      }`}
+                    >
+                      {showRoutes ? '🛑 Hide Routes' : '🗺️ Show Routes'}
+                    </button>
+                  </div>
                   
                   {vehicles.length === 0 ? (
                     <div className="flex-1 flex items-center justify-center">
@@ -1117,158 +1127,7 @@ export default function FleetLinkApp() {
                 />
               )}
 
-              {/* Routing Section */}
-              {activeSection === 'routing' && (
-                <>
-                  <h3 className="text-lg font-semibold text-slate-800 mb-4">Route Management</h3>
-                  
-                  <div className="space-y-4">
-                    <div className="bg-white/40 backdrop-blur-xl rounded-lg p-4 border border-white/30">
-                      <h4 className="font-medium text-slate-800 mb-2">Route Controls</h4>
-                      <div className="space-y-3">
-                        <button
-                          onClick={toggleRoutes}
-                          className={`w-full px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
-                            showRoutes 
-                              ? 'bg-green-500 hover:bg-green-600 text-white' 
-                              : 'bg-blue-500 hover:bg-blue-600 text-white'
-                          }`}
-                        >
-                          {showRoutes ? '🛑 Hide Routes' : '🗺️ Show Routes'}
-                        </button>
-                        
-                        <button
-                          onClick={() => generateRoutesForVehicles('manual-button')}
-                          disabled={vehicles.length === 0 || loading}
-                          className="w-full px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-slate-300 text-white rounded-lg transition-colors text-sm font-medium"
-                        >
-                          {loading ? 'Optimizing...' : '🚀 Optimize All Routes'}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="bg-white/40 backdrop-blur-xl rounded-lg p-4 border border-white/30">
-                      <h4 className="font-medium text-slate-800 mb-3">Route Statistics</h4>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-slate-600">Active Routes:</span>
-                          <span className="text-slate-800 font-medium">
-                            {vehicles.filter(v => v.deliveryRoute).length}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-600">Total Packages:</span>
-                          <span className="text-slate-800 font-medium">{allPackages.length}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-600">Pending Deliveries:</span>
-                          <span className="text-slate-800 font-medium">
-                            {allPackages.filter(p => p.status === 'pending').length}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Vehicle Routes List */}
-                    <div className="flex-1 overflow-y-auto">
-                      <h4 className="font-medium text-slate-800 mb-2">Vehicle Routes</h4>
-                      <div className="space-y-2">
-                        {vehicles.filter(v => v.deliveryRoute).map(vehicle => (
-                          <div key={vehicle.vehicle_id} className="bg-white/30 backdrop-blur-xl rounded-lg p-3 border border-white/20">
-                            <div className="flex justify-between items-center mb-2">
-                              <div className="font-medium text-slate-800">{vehicle.vehicle_id}</div>
-                              <div className="text-xs text-slate-600">
-                                {vehicle.packages.length} stops
-                              </div>
-                            </div>
-                            <div className="text-xs text-slate-600">
-                              <div>Distance: {formatDistance(vehicle.deliveryRoute?.total_distance || 0)}</div>
-                              <div>Time: {formatDuration(vehicle.deliveryRoute?.total_duration || 0)}</div>
-                            </div>
-                          </div>
-                        ))}
-                        
-                        {vehicles.filter(v => v.deliveryRoute).length === 0 && (
-                          <div className="text-center py-4">
-                            <div className="text-2xl mb-2">🗺️</div>
-                            <div className="text-slate-600 text-sm">No routes generated</div>
-                            <div className="text-slate-500 text-xs mt-1">Add packages and optimize routes</div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Simulation Section */}
-              {activeSection === 'simulation' && (
-                <>
-                  <h3 className="text-lg font-semibold text-slate-800 mb-4">Fleet Simulation</h3>
-                  <div className="space-y-4">
-                    <div className="bg-white/40 backdrop-blur-xl rounded-lg p-4 border border-white/30">
-                      <h4 className="font-medium text-slate-800 mb-2">Simulation Controls</h4>
-                      <p className="text-sm text-slate-600 mb-4">
-                        Start simulation to activate delivery routes. Vehicles will update their status automatically.
-                      </p>
-                      
-                      <div className="space-y-3">
-                        <button 
-                          onClick={handleStartSimulation}
-                          disabled={vehicles.length === 0 || loading}
-                          className="w-full px-4 py-3 bg-green-500 hover:bg-green-600 disabled:bg-slate-300 text-white rounded-lg transition-colors text-sm font-medium shadow-lg"
-                        >
-                          {loading ? 'Starting...' : '🚀 Start Simulation'}
-                        </button>
-                        
-                        <button 
-                          onClick={handleStopSimulation}
-                          disabled={loading}
-                          className="w-full px-4 py-3 bg-red-500 hover:bg-red-600 disabled:bg-slate-300 text-white rounded-lg transition-colors text-sm font-medium shadow-lg"
-                        >
-                          {loading ? 'Stopping...' : '⏹️ Stop Simulation'}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="bg-white/40 backdrop-blur-xl rounded-lg p-4 border border-white/30">
-                      <h4 className="font-medium text-slate-800 mb-2">Simulation Status</h4>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-slate-600">Active Vehicles:</span>
-                          <span className="text-slate-800 font-medium">
-                            {vehicles.filter(v => v.status === 'active').length}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-600">Total Packages:</span>
-                          <span className="text-slate-800 font-medium">{allPackages.length}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-600">In Transit:</span>
-                          <span className="text-slate-800 font-medium">
-                            {allPackages.filter(p => p.status === 'in-transit').length}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-600">With Routes:</span>
-                          <span className="text-slate-800 font-medium">
-                            {vehicles.filter(v => v.deliveryRoute).length}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {vehicles.length === 0 && (
-                      <div className="text-center py-6">
-                        <div className="text-4xl mb-3">🚛</div>
-                        <div className="text-slate-600 text-sm">No vehicles available</div>
-                        <div className="text-slate-500 text-xs mt-1">Add vehicles to start simulation</div>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
+              {/* Removed Routing and Simulation tabs - functionality moved to Fleet Overview */}
             </div>
           )}
         </div>
