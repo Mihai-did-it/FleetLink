@@ -169,6 +169,65 @@ export async function getOptimizedRoute(
 }
 
 /**
+ * Simple waypoint optimization using nearest neighbor algorithm
+ */
+function optimizeWaypointOrder(startLocation: RouteWaypoint, destinations: RouteWaypoint[]): RouteWaypoint[] {
+  if (destinations.length <= 1) return destinations;
+  
+  const optimized: RouteWaypoint[] = [];
+  const remaining = [...destinations];
+  let currentLocation = startLocation;
+  
+  while (remaining.length > 0) {
+    // Find the closest remaining destination
+    let closestIndex = 0;
+    let shortestDistance = calculateDistance(
+      currentLocation.coordinates,
+      remaining[0].coordinates
+    );
+    
+    for (let i = 1; i < remaining.length; i++) {
+      const distance = calculateDistance(
+        currentLocation.coordinates,
+        remaining[i].coordinates
+      );
+      if (distance < shortestDistance) {
+        shortestDistance = distance;
+        closestIndex = i;
+      }
+    }
+    
+    // Add the closest destination to optimized route
+    const closest = remaining.splice(closestIndex, 1)[0];
+    optimized.push(closest);
+    currentLocation = closest;
+  }
+  
+  return optimized;
+}
+
+/**
+ * Calculate distance between two coordinates using Haversine formula
+ */
+function calculateDistance(coord1: [number, number], coord2: [number, number]): number {
+  const [lng1, lat1] = coord1;
+  const [lng2, lat2] = coord2;
+  
+  const toRad = (deg: number) => deg * (Math.PI / 180);
+  const R = 6371; // Earth's radius in kilometers
+  
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+            Math.sin(dLng/2) * Math.sin(dLng/2);
+  
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c; // Distance in kilometers
+}
+
+/**
  * Create a delivery route for a vehicle with multiple package destinations
  */
 export async function createDeliveryRoute(
@@ -182,10 +241,14 @@ export async function createDeliveryRoute(
     console.log('📍 Start location:', startLocation);
     console.log('📦 Package destinations:', packageDestinations);
 
-    // Combine start location with all package destinations
+    // Simple optimization: reorder waypoints by distance from start
+    const optimizedDestinations = optimizeWaypointOrder(startLocation, packageDestinations);
+    console.log('🔄 Optimized waypoint order:', optimizedDestinations.map(d => d.address));
+
+    // Combine start location with optimized package destinations
     const allCoordinates = [
       startLocation.coordinates,
-      ...packageDestinations.map(dest => dest.coordinates)
+      ...optimizedDestinations.map(dest => dest.coordinates)
     ];
 
     console.log('🗺️ All coordinates for routing:', allCoordinates);
@@ -206,11 +269,49 @@ export async function createDeliveryRoute(
       throw new Error('No route returned from MapBox API');
     }
 
+    // Calculate accurate ETAs based on route legs
+    console.log('📍 Route legs:', route.legs?.map((leg, i) => ({
+      leg: i + 1,
+      duration: `${Math.round(leg.duration / 60)}min`,
+      distance: `${(leg.distance / 1000).toFixed(1)}km`
+    })));
+    
+    const waypointsWithETAs = optimizedDestinations.map((waypoint, index) => {
+      let cumulativeDuration = 0;
+      
+      // Sum up durations from start to this waypoint (legs are 0-indexed)
+      for (let i = 0; i <= index && i < route.legs.length; i++) {
+        cumulativeDuration += route.legs[i].duration;
+      }
+      
+      // Convert seconds to human-readable format
+      const hours = Math.floor(cumulativeDuration / 3600);
+      const minutes = Math.floor((cumulativeDuration % 3600) / 60);
+      
+      let etaString;
+      if (hours > 0) {
+        etaString = `${hours}h ${minutes}m`;
+      } else {
+        etaString = `${minutes}m`;
+      }
+      
+      console.log(`📍 Waypoint ${index + 1} ETA:`, {
+        address: waypoint.address,
+        legDuration: `${Math.round((route.legs[index]?.duration || 0) / 60)}min`,
+        cumulativeTime: etaString
+      });
+      
+      return {
+        ...waypoint,
+        estimatedTime: etaString
+      };
+    });
+
     const deliveryRoute = {
       vehicleId,
       startLocation,
-      waypoints: packageDestinations,
-      destination: packageDestinations[packageDestinations.length - 1],
+      waypoints: waypointsWithETAs,
+      destination: waypointsWithETAs[waypointsWithETAs.length - 1],
       routeGeometry: route.geometry,
       duration: route.duration,
       distance: route.distance
