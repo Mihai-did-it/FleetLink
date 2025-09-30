@@ -71,6 +71,7 @@ export default function FleetLinkApp() {
   // New delivery orchestrator for waypoint-based deliveries
   const deliveryOrchestratorRef = useRef<DeliveryOrchestrator | null>(null);
   const [simulationStates, setSimulationStates] = useState<Map<string, any>>(new Map());
+  const [simulationUpdateCounter, setSimulationUpdateCounter] = useState(0);
   
   // Toast notifications
   const { toast } = useToast();
@@ -607,8 +608,14 @@ export default function FleetLinkApp() {
           newState.animationFrame = requestAnimationFrame(updatePosition);
         }
 
-        currentStates.set(vehicleId, newState);
-        return currentStates;
+        // Create a completely new Map to ensure React detects the change
+        const newStates = new Map(currentStates);
+        newStates.set(vehicleId, newState);
+        
+        // Force a re-render by updating the counter
+        setSimulationUpdateCounter(prev => prev + 1);
+        
+        return newStates;
       });
     };
 
@@ -1727,7 +1734,7 @@ export default function FleetLinkApp() {
 
       {/* Top Navigation Bar */}
       <div className="absolute top-0 left-0 right-0 z-50">
-        <div className="bg-white/70 backdrop-blur-xl border-b border-white/20 shadow-lg">
+        <div className="bg-white/10 backdrop-blur-3xl border-b border-white/10 shadow-lg">
           <div className="px-6 py-4">
             <div className="flex items-center justify-between">
               {/* FleetLink Title */}
@@ -1747,31 +1754,31 @@ export default function FleetLinkApp() {
                   <button
                     key={section}
                     onClick={() => setActiveSection(section as any)}
-                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                    className={`px-5 py-2.5 text-sm font-semibold rounded-xl transition-all backdrop-blur-sm border-2 ${
                       activeSection === section
-                        ? 'bg-blue-500 text-white shadow-lg'
-                        : 'text-slate-600 hover:bg-white/50 hover:text-slate-800'
+                        ? 'bg-blue-600/90 text-white shadow-xl shadow-blue-500/30 border-blue-400/50 ring-2 ring-blue-400/20'
+                        : 'text-white/90 hover:bg-white/20 hover:text-white border-white/30 hover:border-white/50 bg-white/10'
                     }`}
                   >
-                    {section === 'fleet' ? 'Fleet' : 
-                     section === 'add-vehicle' ? 'Add Vehicle' : 'Add Packages'}
+                    {section === 'fleet' ? '🚛 Fleet' : 
+                     section === 'add-vehicle' ? '➕ Add Vehicle' : '📦 Add Packages'}
                   </button>
                 ))}
               </div>
 
               {/* Stats and Quick Actions */}
               <div className="flex items-center space-x-4 text-sm">
-                <div className="flex items-center space-x-2">
-                  <span className="text-slate-500">Vehicles:</span>
-                  <span className="font-semibold text-slate-800">{vehicles.length}</span>
+                <div className="flex items-center space-x-2 bg-white/15 px-3 py-1.5 rounded-lg backdrop-blur-sm border border-white/20">
+                  <span className="text-white/80 font-medium">Vehicles:</span>
+                  <span className="font-bold text-white text-lg shadow-lg">{vehicles.length}</span>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-slate-500">Packages:</span>
-                  <span className="font-semibold text-slate-800">{allPackages.length}</span>
+                <div className="flex items-center space-x-2 bg-white/15 px-3 py-1.5 rounded-lg backdrop-blur-sm border border-white/20">
+                  <span className="text-white/80 font-medium">Packages:</span>
+                  <span className="font-bold text-white text-lg shadow-lg">{allPackages.length}</span>
                 </div>
                 
                 {/* Quick Action Buttons */}
-                <div className="flex items-center space-x-2 border-l border-slate-300 pl-4">
+                <div className="flex items-center space-x-2 border-l border-white/20 pl-4">
                   <button
                     onClick={() => handleMapPickerToggle(
                       true, 
@@ -1783,11 +1790,11 @@ export default function FleetLinkApp() {
                       'vehicle',
                       'Click on the map to add a vehicle at that location'
                     )}
-                    className="px-3 py-2 text-xs font-medium rounded-lg bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 hover:from-blue-200 hover:to-blue-300 transition-all flex items-center gap-2 shadow-sm border border-blue-300"
+                    className="px-4 py-2.5 text-xs font-bold rounded-xl bg-blue-600/60 text-blue-50 hover:bg-blue-600/80 transition-all flex items-center gap-2 shadow-xl border border-blue-400/40 backdrop-blur-sm ring-1 ring-blue-400/20"
                     title="Click map to add vehicle at that location"
                   >
                     <span className="text-base">🚛</span>
-                    <span className="font-semibold">Quick Add</span>
+                    <span className="font-bold">Quick Add</span>
                   </button>
                   <button
                     onClick={() => {
@@ -1810,18 +1817,18 @@ export default function FleetLinkApp() {
                         'Click on the map to add a package delivery at that location'
                       );
                     }}
-                    className={`px-3 py-2 text-xs font-medium rounded-lg transition-all flex items-center gap-2 shadow-sm border ${
+                    className={`px-4 py-2.5 text-xs font-bold rounded-xl transition-all flex items-center gap-2 shadow-xl border backdrop-blur-sm ring-1 ${
                       vehicles.length === 0 
-                        ? 'bg-gray-100 text-gray-500 border-gray-300 cursor-not-allowed' 
-                        : 'bg-gradient-to-r from-orange-100 to-orange-200 text-orange-800 hover:from-orange-200 hover:to-orange-300 border-orange-300'
+                        ? 'bg-gray-600/40 text-gray-300 border-gray-400/30 cursor-not-allowed ring-gray-400/10' 
+                        : 'bg-orange-600/60 text-orange-50 hover:bg-orange-600/80 border-orange-400/40 ring-orange-400/20'
                     }`}
                     title={vehicles.length === 0 ? "Add vehicles first" : "Click map to add package delivery at that location"}
                     disabled={vehicles.length === 0}
                   >
                     <span className="text-base">📦</span>
-                    <span className="font-semibold">Quick Add</span>
+                    <span className="font-bold">Quick Add</span>
                     {vehicles.length === 0 && (
-                      <span className="ml-1 px-1.5 py-0.5 text-xs bg-gray-200 text-gray-600 rounded-full">
+                      <span className="ml-1 px-1.5 py-0.5 text-xs bg-gray-500/30 text-gray-200 rounded-full">
                         No vehicles
                       </span>
                     )}
@@ -1830,10 +1837,10 @@ export default function FleetLinkApp() {
                 
                 <button
                   onClick={toggleRoutes}
-                  className={`px-3 py-1 text-xs font-medium rounded-lg transition-all ${
+                  className={`px-3 py-1 text-xs font-medium rounded-xl transition-all border backdrop-blur-sm ${
                     showRoutes 
-                      ? 'bg-green-500 text-white' 
-                      : 'bg-white/50 text-slate-600'
+                      ? 'bg-green-500/80 text-white border-green-400/30' 
+                      : 'bg-white/10 text-white/80 border-white/20 hover:bg-white/20'
                   }`}
                 >
                   {showRoutes ? 'Routes ON' : 'Routes OFF'}
@@ -1851,7 +1858,7 @@ export default function FleetLinkApp() {
         isFleetPanelCollapsed ? 'w-16' : 
         (activeSection === 'add-vehicle' || activeSection === 'add-packages') ? 'w-96' : 'w-80'
       }`}>
-        <div className="bg-white/30 backdrop-blur-2xl border border-white/20 rounded-2xl shadow-2xl shadow-black/10 h-[calc(100vh-8rem)]">
+        <div className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-2xl shadow-2xl shadow-black/20 h-[calc(100vh-8rem)]">
           {/* Collapse Button */}
           <div className="absolute -right-3 top-4 z-10">
             <button
@@ -1869,16 +1876,19 @@ export default function FleetLinkApp() {
               {/* Fleet Section */}
               {activeSection === 'fleet' && (
                 <>
-                  <h3 className="text-lg font-semibold text-slate-800 mb-4">Fleet Overview</h3>
+                  <div className="bg-white/20 backdrop-blur-xl rounded-xl p-4 border border-white/40 mb-4 shadow-lg">
+                    <h3 className="text-xl font-bold text-white mb-1">🚛 Fleet Overview</h3>
+                    <p className="text-white/70 text-sm">Monitor and control your vehicle fleet</p>
+                  </div>
                   
                   {/* Route Toggle Button */}
                   <div className="mb-4">
                     <button
                       onClick={toggleRoutes}
-                      className={`w-full px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
+                      className={`w-full px-4 py-2 rounded-xl transition-all text-sm font-medium backdrop-blur-sm border ${
                         showRoutes 
-                          ? 'bg-green-500 hover:bg-green-600 text-white' 
-                          : 'bg-blue-500 hover:bg-blue-600 text-white'
+                          ? 'bg-green-500/80 hover:bg-green-500/90 text-white border-green-400/30 shadow-lg shadow-green-500/25' 
+                          : 'bg-blue-500/80 hover:bg-blue-500/90 text-white border-blue-400/30 shadow-lg shadow-blue-500/25'
                       }`}
                     >
                       {showRoutes ? '🛑 Hide Routes' : '🗺️ Show Routes'}
@@ -1887,20 +1897,20 @@ export default function FleetLinkApp() {
                   
                   {vehicles.length === 0 ? (
                     <div className="flex-1 flex items-center justify-center">
-                      <div className="text-center">
+                      <div className="text-center bg-white/30 backdrop-blur-xl rounded-xl p-6 border border-white/40">
                         <div className="text-4xl mb-3">🚛</div>
-                        <div className="text-slate-600 text-sm">No vehicles added yet</div>
-                        <div className="text-slate-500 text-xs mt-1">Click "Add Vehicle" to get started</div>
+                        <div className="text-slate-700 text-sm font-medium">No vehicles added yet</div>
+                        <div className="text-slate-600 text-xs mt-1">Click "Add Vehicle" to get started</div>
                       </div>
                     </div>
                   ) : (
                     <div className="flex-1 overflow-y-auto space-y-3">
                       {vehicles.map((vehicle) => (
                         <div
-                          key={vehicle.vehicle_id}
-                          className={`bg-white/40 backdrop-blur-xl rounded-xl p-4 border border-white/30 cursor-pointer transition-all hover:bg-white/50 hover:shadow-lg ${
+                          key={`${vehicle.vehicle_id}-${simulationUpdateCounter}`}
+                          className={`bg-white/50 backdrop-blur-xl rounded-xl p-4 border border-white/50 cursor-pointer transition-all hover:bg-white/70 hover:shadow-xl ${
                             selectedVehicle?.vehicle_id === vehicle.vehicle_id
-                              ? 'ring-2 ring-blue-400 bg-white/60'
+                              ? 'ring-2 ring-blue-400 bg-white/70 shadow-xl'
                               : ''
                           }`}
                           onClick={() => {
@@ -1910,8 +1920,8 @@ export default function FleetLinkApp() {
                         >
                           <div className="flex justify-between items-start mb-3">
                             <div>
-                              <div className="font-semibold text-slate-800 text-base">{vehicle.vehicle_id}</div>
-                              <div className="text-sm text-slate-600">{vehicle.driver}</div>
+                              <div className="font-bold text-slate-800 text-base">{vehicle.vehicle_id}</div>
+                              <div className="text-sm text-slate-600 font-medium">{vehicle.driver}</div>
                             </div>
                             <div className={`px-2 py-1 rounded-lg border text-xs font-medium ${getStatusBg(vehicle.status)}`}>
                               <span className={getStatusColor(vehicle.status)}>{vehicle.status}</span>
@@ -1920,18 +1930,18 @@ export default function FleetLinkApp() {
 
                           <div className="space-y-2 text-sm">
                             <div className="flex justify-between">
-                              <span className="text-slate-600">Speed:</span>
-                              <span className="text-slate-800 font-medium">{vehicle.speed} mph</span>
+                              <span className="text-slate-600 font-medium">Speed:</span>
+                              <span className="text-slate-800 font-bold">{vehicle.speed} mph</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-slate-600">Packages:</span>
-                              <span className="text-slate-800 font-medium">{vehicle.packages.length}</span>
+                              <span className="text-slate-600 font-medium">Packages:</span>
+                              <span className="text-slate-800 font-bold">{vehicle.packages.length}</span>
                             </div>
                             
                             {vehicle.deliveryRoute && (
                               <div className="flex justify-between">
-                                <span className="text-slate-600">Route:</span>
-                                <span className="text-slate-800 font-medium text-xs">
+                                <span className="text-slate-600 font-medium">Route:</span>
+                                <span className="text-slate-800 font-bold text-xs">
                                   {formatDistance(vehicle.deliveryRoute.total_distance || 0)}
                                 </span>
                               </div>
@@ -1942,30 +1952,34 @@ export default function FleetLinkApp() {
                               <div className="mt-3 space-y-3">
                                 {/* Route Progress */}
                                 <div>
-                                  <div className="flex justify-between text-xs text-slate-600 mb-1">
+                                  <div className="flex justify-between text-xs text-slate-600 font-medium mb-1">
                                     <span>🗺️ Route Progress</span>
                                     <span>{Math.round((simulationStates.get(vehicle.vehicle_id)?.routeProgress || 0) * 100)}%</span>
                                   </div>
                                   <div className="w-full bg-white/50 rounded-full h-2">
                                     <div
-                                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                                      style={{ width: `${(simulationStates.get(vehicle.vehicle_id)?.routeProgress || 0) * 100}%` }}
+                                      className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+                                      style={{ 
+                                        width: `${(simulationStates.get(vehicle.vehicle_id)?.routeProgress || 0) * 100}%`,
+                                        transform: `translateX(0)` // Force reflow
+                                      }}
                                     />
                                   </div>
                                 </div>
                                 
                                 {/* Package Delivery Progress */}
                                 <div>
-                                  <div className="flex justify-between text-xs text-slate-600 mb-1">
+                                  <div className="flex justify-between text-xs text-slate-600 font-medium mb-1">
                                     <span>📦 Packages Delivered</span>
                                     <span>{simulationStates.get(vehicle.vehicle_id)?.deliveredPackages?.length || 0} / {vehicle.packages?.length || 0}</span>
                                   </div>
                                   <div className="w-full bg-white/50 rounded-full h-2">
                                     <div
-                                      className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                                      className="bg-green-500 h-2 rounded-full transition-all duration-500"
                                       style={{ 
                                         width: `${vehicle.packages?.length ? 
-                                          ((simulationStates.get(vehicle.vehicle_id)?.deliveredPackages?.length || 0) / vehicle.packages.length) * 100 : 0}%` 
+                                          ((simulationStates.get(vehicle.vehicle_id)?.deliveredPackages?.length || 0) / vehicle.packages.length) * 100 : 0}%`,
+                                        transform: `translateX(0)` // Force reflow
                                       }}
                                     />
                                   </div>
@@ -1977,7 +1991,7 @@ export default function FleetLinkApp() {
                               <div className="mt-3 space-y-3">
                                 {/* Static Route Progress */}
                                 <div>
-                                  <div className="flex justify-between text-xs text-slate-600 mb-1">
+                                  <div className="flex justify-between text-xs text-slate-600 font-medium mb-1">
                                     <span>🗺️ Route Progress</span>
                                     <span>{vehicle.progress}%</span>
                                   </div>
@@ -1992,7 +2006,7 @@ export default function FleetLinkApp() {
                                 {/* Static Package Progress */}
                                 {vehicle.packages && vehicle.packages.length > 0 && (
                                   <div>
-                                    <div className="flex justify-between text-xs text-slate-600 mb-1">
+                                    <div className="flex justify-between text-xs text-slate-600 font-medium mb-1">
                                       <span>📦 Package Status</span>
                                       <span>{vehicle.packages.filter(pkg => pkg.status === 'delivered').length} / {vehicle.packages.length}</span>
                                     </div>
