@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from '@/hooks/use-toast'
 import { addVehicle, geocodeAddress } from '@/lib/local-api'
 import { LocationFinder } from '../common/LocationFinder'
@@ -150,41 +149,43 @@ export function AddVehicleTab({ mapboxToken, onVehicleAdded, onMapPickerToggle }
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+      <div className="bg-white/50 backdrop-blur-xl rounded-xl border border-white/50 shadow-lg">
+        <div className="p-4 border-b border-white/30">
+          <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
             🚛 Add Vehicle
-          </CardTitle>
-          <CardDescription>
+          </h3>
+          <p className="text-slate-600 text-sm mt-1">
             Add a new vehicle to your fleet with precise location
-          </CardDescription>
-        </CardHeader>
-      <CardContent>
-        <form onSubmit={handleAddVehicle} className="space-y-4">
+          </p>
+        </div>
+        <div className="p-4">
+          <form onSubmit={handleAddVehicle} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="vehicle-id">Vehicle ID</Label>
+            <Label htmlFor="vehicle-id" className="text-slate-700 font-medium">Vehicle ID</Label>
             <Input
               id="vehicle-id"
               placeholder="e.g., TRUCK-001"
               value={newVehicle.vehicle_id}
               onChange={(e) => setNewVehicle(prev => ({ ...prev, vehicle_id: e.target.value }))}
               required
+              className="bg-white/80 border-white/50"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="driver">Driver Name</Label>
+            <Label htmlFor="driver" className="text-slate-700 font-medium">Driver Name</Label>
             <Input
               id="driver"
               placeholder="e.g., John Smith"
               value={newVehicle.driver}
               onChange={(e) => setNewVehicle(prev => ({ ...prev, driver: e.target.value }))}
               required
+              className="bg-white/80 border-white/50"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="location">Starting Location</Label>
+            <Label htmlFor="location" className="text-slate-700 font-medium">Starting Location</Label>
             <div className="space-y-3">
               <LocationFinder
                 mapboxToken={mapboxToken}
@@ -217,8 +218,8 @@ export function AddVehicleTab({ mapboxToken, onVehicleAdded, onMapPickerToggle }
             {loading ? 'Adding Vehicle...' : 'Add Vehicle'}
           </Button>
         </form>
-      </CardContent>
-    </Card>
+        </div>
+      </div>
 
   </>
   )
