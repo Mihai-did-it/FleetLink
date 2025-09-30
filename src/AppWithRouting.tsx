@@ -10,16 +10,6 @@ import {
   type DeliveryRoute,
   type RouteWaypoint 
 } from "./lib/routing";
-import { 
-  getVehicles, 
-  addVehicle as apiAddVehicle, 
-  addPackage,
-  assignPackageToVehicle,
-  startSimulation,
-  stopSimulation,
-  type Vehicle as ApiVehicle,
-  type Package as ApiPackage
-} from "./lib/api";
 
 // Types
 interface Package {
@@ -109,21 +99,26 @@ export default function App() {
     };
   }, []);
 
-  // Load vehicles from API with proper error handling
+  // Load vehicles from backend - no default data
   useEffect(() => {
     const loadVehicles = async () => {
       try {
-        const data = await getVehicles();
-        setVehicles(data.map((v: any) => ({
-          ...v,
-          status: v.status === 'active' ? 'on-time' : v.status,
-          packages: Array.isArray(v.packages) ? v.packages : [],
-          progress: v.status === 'active' ? Math.floor(Math.random() * 100) : 0
-        })));
-        setIsConnected(true);
+        const response = await fetch('http://localhost:8000/vehicles');
+        if (response.ok) {
+          const data = await response.json();
+          setVehicles(data.map((v: any) => ({
+            ...v,
+            status: v.status === 'active' ? 'on-time' : v.status,
+            packages: v.packages || [],
+            progress: v.status === 'active' ? Math.floor(Math.random() * 100) : 0
+          })));
+          setIsConnected(true);
+        } else {
+          setIsConnected(false);
+        }
       } catch (error) {
-        console.error("Failed to load vehicles:", error);
         setIsConnected(false);
+        // No fallback data - empty until vehicles are added
         setVehicles([]);
       }
     };
@@ -346,38 +341,38 @@ export default function App() {
     }
     
     try {
-      await apiAddVehicle({
-        vehicle_id: newVehicle.id,
-        driver: newVehicle.driver,
-        lat: coordinates.lat,
-        lon: coordinates.lng,
-        status: 'idle',
-        speed: 0,
-        location: newVehicle.location
+      const response = await fetch('http://localhost:8000/vehicles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicle_id: newVehicle.id,
+          driver: newVehicle.driver,
+          lat: coordinates.lat,
+          lng: coordinates.lng,
+          status: 'idle',
+          speed: 0,
+          location: newVehicle.location
+        })
       });
       
-      // Reset form
-      setNewVehicle({ id: '', driver: '', location: '' });
-      setLocationSuggestions([]);
-      setShowLocationSuggestions(false);
-      
-      // Reload vehicles
-      const updatedVehicles = await getVehicles();
-      setVehicles(updatedVehicles.map((v: any) => ({
-        ...v,
-        status: v.status === 'active' ? 'on-time' : v.status,
-        packages: Array.isArray(v.packages) ? v.packages : [],
-        progress: v.status === 'active' ? Math.floor(Math.random() * 100) : 0
-      })));
-      
+      if (response.ok) {
+        setNewVehicle({ id: '', driver: '', location: '' });
+        setLocationSuggestions([]);
+        setShowLocationSuggestions(false);
+        // Refresh vehicles list
+        const vehiclesResponse = await fetch('http://localhost:8000/vehicles');
+        if (vehiclesResponse.ok) {
+          const data = await vehiclesResponse.json();
+          setVehicles(data);
+        }
+      }
     } catch (error) {
       console.error('Failed to add vehicle:', error);
-      alert(`Failed to add vehicle: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
   // Add package function
-  const addPackageToVehicle = async () => {
+  const addPackage = async () => {
     if (!newPackage.vehicleId || !newPackage.destination || !newPackage.weight) return;
     
     // Get coordinates for destination
@@ -398,43 +393,23 @@ export default function App() {
       console.error('Failed to geocode destination:', error);
     }
     
-    try {
-      // Add package using the new API
-      await addPackage({
-        destination: {
-          address: newPackage.destination,
-          lat: packageCoordinates[1],
-          lng: packageCoordinates[0]
-        },
-        priority: "medium",
-        status: "pending",
-        estimatedDeliveryTime: new Date(Date.now() + 30 * 60000).toLocaleTimeString(),
-        packageType: "General",
-        vehicleId: newPackage.vehicleId
-      });
-      
-      // Reset form
-      setNewPackage({ vehicleId: '', destination: '', weight: 0 });
-      
-      // Reload vehicles to get updated packages
-      const updatedVehicles = await getVehicles();
-      setVehicles(updatedVehicles.map((v: any) => ({
-        ...v,
-        status: v.status === 'active' ? 'on-time' : v.status,
-        packages: Array.isArray(v.packages) ? v.packages.map((p: any) => ({
-          id: p.id,
-          destination: p.destination?.address || p.destination,
-          weight: newPackage.weight,
-          status: p.status,
-          coordinates: p.destination ? [p.destination.lng, p.destination.lat] : packageCoordinates
-        })) : [],
-        progress: v.status === 'active' ? Math.floor(Math.random() * 100) : 0
-      })));
-      
-    } catch (error) {
-      console.error('Failed to add package:', error);
-      alert(`Failed to add package: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    // Add to local state
+    setVehicles(prev => prev.map(v => 
+      v.vehicle_id === newPackage.vehicleId 
+        ? {
+            ...v, 
+            packages: [...v.packages, {
+              id: `PKG-${Date.now()}`,
+              destination: newPackage.destination,
+              weight: newPackage.weight,
+              status: 'pending' as const,
+              coordinates: packageCoordinates
+            }]
+          }
+        : v
+    ));
+    
+    setNewPackage({ vehicleId: '', destination: '', weight: 0 });
   };
 
   // Update map markers and routes
@@ -929,7 +904,7 @@ export default function App() {
                       />
                     </div>
                     <button
-                      onClick={addPackageToVehicle}
+                      onClick={addPackage}
                       disabled={!newPackage.vehicleId || !newPackage.destination || !newPackage.weight}
                       className="w-full px-4 py-3 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-300 text-white rounded-lg transition-colors text-sm font-medium shadow-lg"
                     >
@@ -954,8 +929,12 @@ export default function App() {
                         <button 
                           onClick={async () => {
                             try {
-                              const response = await startSimulation();
-                              console.log('Simulation started:', response.message);
+                              const response = await fetch('http://localhost:8000/simulation/start', {
+                                method: 'POST'
+                              });
+                              if (response.ok) {
+                                console.log('Simulation started');
+                              }
                             } catch (error) {
                               console.error('Failed to start simulation:', error);
                             }
@@ -969,8 +948,12 @@ export default function App() {
                         <button 
                           onClick={async () => {
                             try {
-                              const response = await stopSimulation();
-                              console.log('Simulation stopped:', response.message);
+                              const response = await fetch('http://localhost:8000/simulation/stop', {
+                                method: 'POST'
+                              });
+                              if (response.ok) {
+                                console.log('Simulation stopped');
+                              }
                             } catch (error) {
                               console.error('Failed to stop simulation:', error);
                             }

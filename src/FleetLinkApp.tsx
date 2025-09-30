@@ -29,6 +29,7 @@ import { type VehicleWithPackages } from './types'
 import { AddVehicleTab } from './components/tabs/AddVehicleTab'
 import { AddPackageTab } from './components/tabs/AddPackageTab'
 import { useToast } from '@/hooks/use-toast'
+import { DeliveryOrchestrator } from './systems/DeliveryOrchestrator'
 import { Toaster } from '@/components/ui/toaster'
 
 // Types
@@ -64,30 +65,12 @@ export default function FleetLinkApp() {
   const [failedVehicles, setFailedVehicles] = useState<Set<string>>(new Set()); // Persistent failed vehicle tracking
   const [loading, setLoading] = useState(false);
   
-  // Simulation states
-  const [simulationState, setSimulationState] = useState<{
-    [vehicleId: string]: {
-      isActive: boolean;
-      currentPosition: [number, number];
-      routeProgress: number; // 0-1, percentage through route
-      speed: number; // km/h
-      currentSpeed: number; // current actual speed
-      deliveredPackages: string[];
-      animationFrame?: number;
-      lastUpdateTime?: number;
-      fastForward: number; // 1x, 2x, 4x, 8x speed multiplier
-    }
-  }>({});
+  // New delivery orchestrator for waypoint-based deliveries
+  const deliveryOrchestratorRef = useRef<DeliveryOrchestrator | null>(null);
+  const [simulationStates, setSimulationStates] = useState<Map<string, any>>(new Map());
   
   // Toast notifications
   const { toast } = useToast();
-  
-  // Recent delivery notifications
-  const [recentDeliveries, setRecentDeliveries] = useState<{
-    vehicleId: string;
-    destination: string;
-    timestamp: number;
-  }[]>([]);
   
   // Form states
   const [newVehicle, setNewVehicle] = useState<NewVehicle>({ id: '', driver: '', location: '' });
@@ -129,6 +112,10 @@ export default function FleetLinkApp() {
     // Add speed label layers when map loads
     map.current.on('load', () => {
       if (!map.current) return;
+      
+      // Initialize delivery orchestrator
+      deliveryOrchestratorRef.current = new DeliveryOrchestrator(map.current);
+      console.log('🎬 Delivery orchestrator initialized');
       
       // Add speed label source and layer for each vehicle
       vehicles.forEach(vehicle => {
@@ -214,16 +201,9 @@ export default function FleetLinkApp() {
     };
   }, []);
 
-  // Clean up old delivery notifications
+  // Initialize app
   useEffect(() => {
-    const interval = setInterval(() => {
-      const now = Date.now();
-      setRecentDeliveries(prev => prev.filter(delivery => 
-        now - delivery.timestamp < 10000 // Keep for 10 seconds
-      ));
-    }, 1000);
-
-    return () => clearInterval(interval);
+    loadVehiclesAndPackages();
   }, []);
 
   const loadVehiclesAndPackages = async () => {
@@ -428,147 +408,197 @@ export default function FleetLinkApp() {
     const vehicleId = vehicle.vehicle_id;
     const routeCoordinates = vehicle.deliveryRoute.route_geometry.coordinates;
     
-    console.log(`🚀 Starting simulation for ${vehicleId}`);
+    console.log(`🚀 Starting waypoint-based simulation for ${vehicleId}`);
     
-    // Initialize simulation state with realistic base speed
-    setSimulationState(prev => ({
-      ...prev,
-      [vehicleId]: {
-        isActive: true,
-        currentPosition: routeCoordinates[0],
-        routeProgress: 0,
-        speed: 35, // Base speed 35 mph (realistic city driving)
-        currentSpeed: 0,
-        deliveredPackages: [],
-        lastUpdateTime: Date.now(),
-        fastForward: 1
-      }
-    }));
-
-    // Start animation
+    // Start animation with new waypoint system
     animateVehicle(vehicleId, routeCoordinates, vehicle);
   };
 
   const stopVehicleSimulation = (vehicleId: string) => {
     console.log(`⏹️ Stopping simulation for ${vehicleId}`);
     
-    setSimulationState(prev => {
-      const newState = { ...prev };
-      if (newState[vehicleId]) {
-        if (newState[vehicleId].animationFrame) {
-          cancelAnimationFrame(newState[vehicleId].animationFrame!);
+    // Stop delivery orchestrator
+    if (deliveryOrchestratorRef.current) {
+      deliveryOrchestratorRef.current.stopDeliverySimulation(vehicleId);
+    }
+    
+    setSimulationStates(prev => {
+      const newStates = new Map(prev);
+      const vehicleState = newStates.get(vehicleId);
+      
+      if (vehicleState) {
+        if (vehicleState.animationFrame) {
+          cancelAnimationFrame(vehicleState.animationFrame);
         }
-        newState[vehicleId].isActive = false;
-        newState[vehicleId].currentSpeed = 0;
+        
+        const updatedState = {
+          ...vehicleState,
+          isActive: false,
+          currentSpeed: 0
+        };
+        
+        newStates.set(vehicleId, updatedState);
         
         // Hide speed label when stopped
-        updateVehicleMarker(vehicleId, newState[vehicleId].currentPosition, 0);
+        updateVehicleMarker(vehicleId, vehicleState.currentPosition, 0);
       }
-      return newState;
+      
+      return newStates;
     });
   };
 
   const setSimulationSpeed = (vehicleId: string, fastForward: number) => {
-    setSimulationState(prev => ({
-      ...prev,
-      [vehicleId]: {
-        ...prev[vehicleId],
-        fastForward
+    setSimulationStates(prev => {
+      const newStates = new Map(prev);
+      const vehicleState = newStates.get(vehicleId);
+      
+      if (vehicleState) {
+        newStates.set(vehicleId, {
+          ...vehicleState,
+          fastForward
+        });
       }
-    }));
+      
+      return newStates;
+    });
+  };
+
+  // TEST FUNCTION: Manually trigger delivery notifications for testing
+  const testDeliveryNotifications = (vehicleId: string) => {
+    const vehicle = vehicles.find(v => v.vehicle_id === vehicleId);
+    if (!vehicle?.packages || vehicle.packages.length === 0) {
+      toast({
+        title: "❌ No packages to test",
+        description: "Add packages to this vehicle first",
+        duration: 3000,
+      });
+      return;
+    }
+
+    // Test with first package
+    const testPackage = vehicle.packages[0];
+    console.log(`🧪 TESTING delivery notification for package ${testPackage.package_id}`);
+    
+    toast({
+      title: "🧪 TEST - Package Delivered!",
+      description: `Vehicle ${vehicleId} delivered package to ${testPackage.destination}`,
+      duration: 5000,
+      className: "bg-green-50 border-green-200",
+    });
+    
+    console.log(`✅ Test notification sent for ${testPackage.package_id}`);
   };
 
   const animateVehicle = (vehicleId: string, routeCoordinates: [number, number][], vehicle: VehicleWithPackages) => {
+    if (!deliveryOrchestratorRef.current) {
+      console.error('❌ Delivery orchestrator not initialized');
+      return;
+    }
+
+    console.log(`🚀 Starting waypoint-based simulation for vehicle ${vehicleId}`);
+
+    // Initialize delivery session with waypoints
+    const deliverySession = deliveryOrchestratorRef.current.initializeDeliverySession(
+      vehicle,
+      routeCoordinates,
+      routeCoordinates[0] // Start position
+    );
+
+    if (!deliverySession) {
+      console.error(`❌ Failed to initialize delivery session for vehicle ${vehicleId}`);
+      return;
+    }
+
+    // Start delivery simulation
+    deliveryOrchestratorRef.current.startDeliverySimulation(vehicleId);
+
+    // Initialize simulation state
+    const initialState = {
+      isActive: true,
+      routeProgress: 0,
+      currentPosition: routeCoordinates[0],
+      currentSpeed: 0,
+      deliveredPackages: [],
+      lastUpdateTime: Date.now(),
+      fastForward: 1,
+      animationFrame: null as number | null
+    };
+
+    setSimulationStates(prev => new Map(prev).set(vehicleId, initialState));
+
     const updatePosition = () => {
-      setSimulationState(prev => {
-        const vehicleState = prev[vehicleId];
+      setSimulationStates(prev => {
+        const currentStates = new Map(prev);
+        const vehicleState = currentStates.get(vehicleId);
+        
         if (!vehicleState || !vehicleState.isActive) return prev;
 
         const now = Date.now();
-        const realDeltaTime = (now - (vehicleState.lastUpdateTime || now)) / 1000; // real seconds
-        const simulationDeltaTime = realDeltaTime * vehicleState.fastForward; // simulation time
+        const realDeltaTime = (now - (vehicleState.lastUpdateTime || now)) / 1000;
+        const simulationDeltaTime = realDeltaTime * vehicleState.fastForward;
         
-        // Realistic speed variation based on route segment
+        // Realistic speed calculation
         const baseSpeed = 35; // mph
         const currentRealisticSpeed = getRealisticSpeed(vehicleState.routeProgress, baseSpeed);
         
         // Convert mph to km/s for distance calculation
-        const speedKmH = currentRealisticSpeed * 1.60934; // Convert mph to km/h
-        const distancePerSecond = speedKmH / 3600; // km/s
+        const speedKmH = currentRealisticSpeed * 1.60934;
+        const distancePerSecond = speedKmH / 3600;
         
-        // Calculate new position along route
+        // Calculate new position
         const totalDistance = calculateRouteDistance(routeCoordinates);
-        const distanceToTravel = distancePerSecond * simulationDeltaTime; // km
+        const distanceToTravel = distancePerSecond * simulationDeltaTime;
         const progressIncrement = distanceToTravel / totalDistance;
         
         const newProgress = Math.min(vehicleState.routeProgress + progressIncrement, 1);
         const newPosition = interpolatePosition(routeCoordinates, newProgress);
-        
-        // Check for package deliveries
-        const deliveredPackages = checkPackageDeliveries(vehicle, newProgress);
-        const previouslyDelivered = vehicleState.deliveredPackages || [];
-        
-        // Detect new deliveries
-        const newDeliveries = deliveredPackages.filter(packageId => 
-          !previouslyDelivered.includes(packageId)
+
+        // Process delivery using orchestrator
+        const deliveryResult = deliveryOrchestratorRef.current!.processDeliveryUpdate(
+          vehicleId,
+          newPosition,
+          newProgress,
+          currentRealisticSpeed
         );
-        
-        // Show toast notifications for new deliveries
-        if (newDeliveries.length > 0) {
-          console.log(`🎉 New deliveries detected for ${vehicleId}:`, newDeliveries);
-          newDeliveries.forEach(packageId => {
-            const packageInfo = vehicle.packages.find(p => p.package_id === packageId);
-            if (packageInfo) {
-              console.log(`📦 Showing toast for package ${packageId} to ${packageInfo.destination}`);
-              
-              // Show toast notification
-              toast({
-                title: "📦 Package Delivered!",
-                description: `Vehicle ${vehicleId} delivered package to ${packageInfo.destination}`,
-                duration: 5000,
-              });
-              
-              // Add to recent deliveries for banner notification
-              setRecentDeliveries(prev => [...prev, {
-                vehicleId,
-                destination: packageInfo.destination,
-                timestamp: Date.now()
-              }]);
-              
-              // Add temporary delivery marker on map
-              addDeliveryAnimation(newPosition, packageInfo.destination);
-            }
-          });
-        }
-        
+
+        // Update simulation state
         const newState = {
           ...vehicleState,
           routeProgress: newProgress,
-          currentPosition: newPosition,
-          currentSpeed: currentRealisticSpeed, // Display actual vehicle speed, not simulation speed
-          deliveredPackages,
+          currentPosition: deliveryResult.finalPosition || newPosition,
+          currentSpeed: currentRealisticSpeed,
+          deliveredPackages: deliveryOrchestratorRef.current!.getVehicleDeliveryState(vehicleId)?.deliveredPackages || [],
           lastUpdateTime: now
         };
 
-        // Update vehicle marker on map with current speed
-        updateVehicleMarker(vehicleId, newPosition, currentRealisticSpeed);
+        // Update vehicle marker
+        updateVehicleMarker(vehicleId, newState.currentPosition, currentRealisticSpeed);
         
-        // Check if simulation is complete
-        if (newProgress >= 1) {
-          console.log(`🏁 Simulation complete for ${vehicleId}`);
+        // Check if complete
+        if (deliveryResult.isComplete || newProgress >= 1) {
+          console.log(`🏁 Route complete for ${vehicleId}`);
+          
           newState.isActive = false;
           newState.currentSpeed = 0;
-          updateVehicleMarker(vehicleId, newPosition, 0);
+          newState.animationFrame = null;
+          
+          // Update final position if provided
+          if (deliveryResult.finalPosition) {
+            newState.currentPosition = deliveryResult.finalPosition;
+            updateVehicleMarker(vehicleId, deliveryResult.finalPosition, 0);
+            console.log(`📍 Vehicle ${vehicleId} final position set to:`, deliveryResult.finalPosition);
+          }
         } else {
           // Continue animation
           newState.animationFrame = requestAnimationFrame(updatePosition);
         }
 
-        return { ...prev, [vehicleId]: newState };
+        currentStates.set(vehicleId, newState);
+        return currentStates;
       });
     };
 
-    // Start the animation loop
+    // Start animation
     requestAnimationFrame(updatePosition);
   };
 
@@ -592,21 +622,163 @@ export default function FleetLinkApp() {
     }
   };
 
-  // Check if any packages should be delivered at current progress
-  const checkPackageDeliveries = (vehicle: VehicleWithPackages, progress: number): string[] => {
-    const deliveryPoints = vehicle.packages.length;
-    if (deliveryPoints === 0) return [];
+  // COMPREHENSIVE DELIVERY SYSTEM - COMPLETELY REWRITTEN
+  
+  // Helper function to calculate distance between two coordinates (Haversine formula)
+  const calculateDistanceToDestination = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c; // Distance in kilometers
+  };
+
+  // Validate that packages have coordinates
+  const validatePackageCoordinates = (vehicle: VehicleWithPackages): Package[] => {
+    const validPackages = vehicle.packages.filter(pkg => {
+      const hasCoords = pkg.destination_lat && pkg.destination_lng && 
+                       !isNaN(pkg.destination_lat) && !isNaN(pkg.destination_lng);
+      
+      if (!hasCoords) {
+        console.warn(`⚠️ Package ${pkg.package_id} missing coordinates:`, {
+          destination: pkg.destination,
+          lat: pkg.destination_lat,
+          lng: pkg.destination_lng
+        });
+      }
+      
+      return hasCoords;
+    });
     
-    const progressPerDelivery = 1 / deliveryPoints;
-    const currentDeliveryIndex = Math.floor(progress / progressPerDelivery);
+    if (validPackages.length !== vehicle.packages.length) {
+      console.warn(`⚠️ Vehicle ${vehicle.vehicle_id}: ${vehicle.packages.length - validPackages.length} packages missing coordinates`);
+    }
+    
+    return validPackages;
+  };
+
+  // Check if any packages should be delivered based on proximity to destination
+  const checkPackageDeliveries = (vehicle: VehicleWithPackages, progress: number, currentPosition: [number, number], previouslyDelivered: string[] = []): string[] => {
+    // Validate packages have coordinates
+    const validPackages = validatePackageCoordinates(vehicle);
+    if (validPackages.length === 0) {
+      console.log(`🚚 Vehicle ${vehicle.vehicle_id}: No valid packages with coordinates`);
+      return [];
+    }
+    
     const deliveredPackages: string[] = [];
+    const DELIVERY_RADIUS_KM = 0.1; // 100 meters - more realistic for delivery range
     
-    console.log(`🚚 Vehicle ${vehicle.vehicle_id}: progress=${progress.toFixed(3)}, deliveryIndex=${currentDeliveryIndex}/${deliveryPoints}`);
+    console.log(`🚚 DELIVERY CHECK - Vehicle ${vehicle.vehicle_id}:`, {
+      progress: progress.toFixed(3),
+      progressPercent: (progress * 100).toFixed(1) + '%',
+      currentPosition: [currentPosition[1].toFixed(6), currentPosition[0].toFixed(6)], // [lat, lng]
+      totalPackages: vehicle.packages.length,
+      validPackages: validPackages.length,
+      deliveryRadius: `${DELIVERY_RADIUS_KM * 1000}m`,
+      previouslyDelivered: previouslyDelivered.length
+    });
     
-    for (let i = 0; i < Math.min(currentDeliveryIndex, deliveryPoints); i++) {
-      if (vehicle.packages[i]) {
-        deliveredPackages.push(vehicle.packages[i].package_id);
-        console.log(`📦 Package ${vehicle.packages[i].package_id} marked for delivery to ${vehicle.packages[i].destination}`);
+    // Check each valid package for proximity delivery
+    for (const pkg of validPackages) {
+      // Skip if already delivered
+      if (previouslyDelivered.includes(pkg.package_id)) {
+        continue;
+      }
+      
+      // Calculate distance from current position to package destination
+      const distance = calculateDistanceToDestination(
+        currentPosition[1], currentPosition[0], // vehicle lat, lng
+        pkg.destination_lat!, pkg.destination_lng! // package destination lat, lng (validated above)
+      );
+      
+      const withinRadius = distance <= DELIVERY_RADIUS_KM;
+      const progressOk = progress > 0.15; // 15% minimum progress
+      
+      console.log(`📍 Package ${pkg.package_id}:`, {
+        destination: pkg.destination,
+        coordinates: [pkg.destination_lat, pkg.destination_lng],
+        distanceKm: distance.toFixed(4),
+        distanceMeters: Math.round(distance * 1000),
+        withinRadius,
+        progressOk,
+        canDeliver: withinRadius && progressOk
+      });
+      
+      // Deliver if within tight radius AND we've made some progress
+      if (withinRadius && progressOk) {
+        deliveredPackages.push(pkg.package_id);
+        console.log(`📦 ✅ DELIVERING Package ${pkg.package_id} - ${Math.round(distance * 1000)}m from destination`);
+      }
+    }
+    
+    if (deliveredPackages.length > 0) {
+      console.log(`🎉 DELIVERY SUCCESS:`, {
+        vehicle: vehicle.vehicle_id,
+        delivered: deliveredPackages,
+        count: deliveredPackages.length
+      });
+    } else {
+      // Show closest undelivered package
+      const undeliveredPackages = validPackages.filter(pkg => !previouslyDelivered.includes(pkg.package_id));
+      if (undeliveredPackages.length > 0) {
+        const distances = undeliveredPackages.map(pkg => ({
+          package_id: pkg.package_id,
+          destination: pkg.destination,
+          distance: calculateDistanceToDestination(
+            currentPosition[1], currentPosition[0],
+            pkg.destination_lat!, pkg.destination_lng!
+          )
+        }));
+        
+        const closest = distances.reduce((min, curr) => curr.distance < min.distance ? curr : min);
+        console.log(`⏳ Closest: ${closest.package_id} (${closest.destination}) - ${Math.round(closest.distance * 1000)}m away`);
+      }
+    }
+    
+    return deliveredPackages;
+  };
+
+  // FINAL DELIVERY CHECK at route completion - more lenient radius
+  const performFinalDeliveryCheck = (vehicle: VehicleWithPackages, currentPosition: [number, number], previouslyDelivered: string[] = []): string[] => {
+    const validPackages = validatePackageCoordinates(vehicle);
+    if (validPackages.length === 0) return [];
+    
+    const deliveredPackages: string[] = [];
+    const FINAL_DELIVERY_RADIUS_KM = 0.15; // 150 meters - more lenient for route completion
+    
+    console.log(`🏁 FINAL DELIVERY CHECK at route completion - Vehicle ${vehicle.vehicle_id}`);
+    
+    for (const pkg of validPackages) {
+      if (previouslyDelivered.includes(pkg.package_id)) continue;
+      
+      const distance = calculateDistanceToDestination(
+        currentPosition[1], currentPosition[0],
+        pkg.destination_lat!, pkg.destination_lng!
+      );
+      
+      console.log(`📍 FINAL CHECK Package ${pkg.package_id}:`, {
+        destination: pkg.destination,
+        distanceMeters: Math.round(distance * 1000),
+        withinFinalRadius: distance <= FINAL_DELIVERY_RADIUS_KM,
+        finalRadiusM: FINAL_DELIVERY_RADIUS_KM * 1000
+      });
+      
+      if (distance <= FINAL_DELIVERY_RADIUS_KM) {
+        deliveredPackages.push(pkg.package_id);
+        console.log(`📦 🎯 FINAL DELIVERY: Package ${pkg.package_id} - ${Math.round(distance * 1000)}m (route completion)`);
+        
+        // Show delivery notification
+        const packageInfo = pkg;
+        toast({
+          title: "📦 Package Delivered!",
+          description: `Vehicle ${vehicle.vehicle_id} delivered package to ${packageInfo.destination}`,
+          duration: 3000,
+          className: "bg-green-50 border-green-200",
+        });
       }
     }
     
@@ -803,14 +975,42 @@ export default function FleetLinkApp() {
     }
 
     if (vehicle.packages.length === 0) {
-      console.error(`❌ Vehicle ${vehicle.vehicle_id} has no packages:`, vehicle.packages);
+      console.log(`ℹ️ Vehicle ${vehicle.vehicle_id} has no packages - skipping route generation`);
       return;
+    }
+
+    // COMPREHENSIVE PACKAGE VALIDATION using consistent logic
+    const validPackages = vehicle.packages.filter(pkg => 
+      pkg.destination_lat && 
+      pkg.destination_lng && 
+      !isNaN(pkg.destination_lat) && 
+      !isNaN(pkg.destination_lng)
+    );
+    if (validPackages.length === 0) {
+      toast({
+        title: "❌ Route Generation Failed",
+        description: `Vehicle ${vehicle.vehicle_id} has no packages with valid coordinates`,
+        variant: "destructive",
+        duration: 5000,
+      });
+      return;
+    }
+
+    if (validPackages.length < vehicle.packages.length) {
+      const invalidCount = vehicle.packages.length - validPackages.length;
+      toast({
+        title: "⚠️ Some Packages Invalid",
+        description: `${invalidCount} packages missing coordinates will be skipped for vehicle ${vehicle.vehicle_id}`,
+        className: "bg-orange-50 border-orange-200",
+        duration: 4000,
+      });
     }
 
     console.log(`🚀 Generating route for vehicle ${vehicle.vehicle_id}`, {
       vehicleCoords: [vehicle.lng, vehicle.lat],
-      packageCount: vehicle.packages.length,
-      packages: vehicle.packages.map(p => ({
+      totalPackages: vehicle.packages.length,
+      validPackages: validPackages.length,
+      validPackageDetails: validPackages.map(p => ({
         id: p.package_id,
         dest: p.destination,
         coords: [p.destination_lng, p.destination_lat]
@@ -825,16 +1025,17 @@ export default function FleetLinkApp() {
         address: `${vehicle.driver}'s Location`
       };
 
-      const packageDestinations: RouteWaypoint[] = vehicle.packages.map((pkg) => ({
+      // Use only valid packages for route generation
+      const packageDestinations: RouteWaypoint[] = validPackages.map((pkg) => ({
         id: pkg.package_id,
-        coordinates: [pkg.destination_lng, pkg.destination_lat],
+        coordinates: [pkg.destination_lng!, pkg.destination_lat!], // Safe to use ! due to validation
         address: pkg.destination,
         packageId: pkg.package_id,
-        estimatedTime: `${15 + vehicle.packages.indexOf(pkg) * 10} min`,
+        estimatedTime: `${15 + validPackages.indexOf(pkg) * 10} min`,
         isDelivered: pkg.status === 'delivered'
       }));
 
-      console.log(`📍 Creating route with ${packageDestinations.length} destinations`);
+      console.log(`📍 Creating route with ${packageDestinations.length} valid destinations`);
 
       const deliveryRoute = await createDeliveryRoute(
         vehicle.vehicle_id,
@@ -1439,22 +1640,7 @@ export default function FleetLinkApp() {
           </div>
         </div>
         
-        {/* Delivery Notification Banner */}
-        {recentDeliveries.length > 0 && (
-          <div className="bg-green-500 text-white px-6 py-3 animate-pulse">
-            <div className="flex items-center justify-center space-x-2">
-              <span className="text-lg">📦</span>
-              <span className="font-medium">
-                Package delivered! Vehicle {recentDeliveries[0].vehicleId} → {recentDeliveries[0].destination}
-              </span>
-              {recentDeliveries.length > 1 && (
-                <span className="text-green-100 text-sm">
-                  (+{recentDeliveries.length - 1} more)
-                </span>
-              )}
-            </div>
-          </div>
-        )}
+        {/* Removed delivery notification banner - using only toast notifications now */}
       </div>
 
       {/* Main Content Panel */}
@@ -1548,26 +1734,26 @@ export default function FleetLinkApp() {
                             )}
                             
                             {/* Show simulation progress if vehicle is being simulated */}
-                            {simulationState[vehicle.vehicle_id]?.isActive && (
+                            {simulationStates.get(vehicle.vehicle_id)?.isActive && (
                               <div className="mt-3">
                                 <div className="flex justify-between text-xs text-slate-600 mb-1">
                                   <span>Route Progress</span>
-                                  <span>{Math.round((simulationState[vehicle.vehicle_id]?.routeProgress || 0) * 100)}%</span>
+                                  <span>{Math.round((simulationStates.get(vehicle.vehicle_id)?.routeProgress || 0) * 100)}%</span>
                                 </div>
                                 <div className="w-full bg-white/50 rounded-full h-2">
                                   <div
                                     className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                                    style={{ width: `${(simulationState[vehicle.vehicle_id]?.routeProgress || 0) * 100}%` }}
+                                    style={{ width: `${(simulationStates.get(vehicle.vehicle_id)?.routeProgress || 0) * 100}%` }}
                                   />
                                 </div>
                                 <div className="flex justify-between text-xs text-slate-600 mt-1">
                                   <span>Packages Delivered</span>
-                                  <span>{simulationState[vehicle.vehicle_id]?.deliveredPackages?.length || 0} / {vehicle.deliveryRoute?.waypoints?.length || 0}</span>
+                                  <span>{simulationStates.get(vehicle.vehicle_id)?.deliveredPackages?.length || 0} / {vehicle.deliveryRoute?.waypoints?.length || 0}</span>
                                 </div>
                               </div>
                             )}
                             
-                            {vehicle.progress !== undefined && !simulationState[vehicle.vehicle_id]?.isActive && (
+                            {vehicle.progress !== undefined && !simulationStates.get(vehicle.vehicle_id)?.isActive && (
                               <div className="mt-3">
                                 <div className="flex justify-between text-xs text-slate-600 mb-1">
                                   <span>Progress</span>
@@ -1673,21 +1859,21 @@ export default function FleetLinkApp() {
                 <div className="bg-white/40 backdrop-blur-xl rounded-xl p-4 border border-white/30">
                   <h3 className="text-lg font-semibold text-slate-800 mb-3">Route Simulation</h3>
                   
-                  {simulationState[selectedVehicle.vehicle_id]?.isActive ? (
+                  {simulationStates.get(selectedVehicle.vehicle_id)?.isActive ? (
                     <div className="space-y-3">
                       {/* Simulation Status */}
                       <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-green-800 font-medium">🚛 Simulation Active</span>
                           <span className="text-green-600 text-sm">
-                            {Math.round((simulationState[selectedVehicle.vehicle_id]?.routeProgress || 0) * 100)}% Complete
+                            {Math.round((simulationStates.get(selectedVehicle.vehicle_id)?.routeProgress || 0) * 100)}% Complete
                           </span>
                         </div>
                         <div className="text-sm text-green-700">
-                          Speed: {Math.round(simulationState[selectedVehicle.vehicle_id]?.currentSpeed || 0)} mph
+                          Speed: {Math.round(simulationStates.get(selectedVehicle.vehicle_id)?.currentSpeed || 0)} mph
                         </div>
                         <div className="text-sm text-green-700">
-                          Packages Delivered: {simulationState[selectedVehicle.vehicle_id]?.deliveredPackages?.length || 0} / {selectedVehicle.packages?.length || 0}
+                          Packages Delivered: {simulationStates.get(selectedVehicle.vehicle_id)?.deliveredPackages?.length || 0} / {selectedVehicle.packages?.length || 0}
                         </div>
                       </div>
 
@@ -1697,7 +1883,7 @@ export default function FleetLinkApp() {
                           <h4 className="text-blue-800 font-medium mb-2">📦 Package Status</h4>
                           <div className="space-y-1 text-sm">
                             {selectedVehicle.packages.map((pkg, index) => {
-                              const isDelivered = simulationState[selectedVehicle.vehicle_id]?.deliveredPackages?.includes(pkg.package_id);
+                              const isDelivered = simulationStates.get(selectedVehicle.vehicle_id)?.deliveredPackages?.includes(pkg.package_id);
                               return (
                                 <div key={pkg.package_id} className="flex items-center justify-between">
                                   <span className="text-slate-700 truncate">{pkg.destination}</span>
@@ -1724,7 +1910,7 @@ export default function FleetLinkApp() {
                               key={speed}
                               onClick={() => setSimulationSpeed(selectedVehicle.vehicle_id, speed)}
                               className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                                (simulationState[selectedVehicle.vehicle_id]?.fastForward || 1) === speed
+                                (simulationStates.get(selectedVehicle.vehicle_id)?.fastForward || 1) === speed
                                   ? 'bg-blue-500 text-white'
                                   : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
                               }`}
@@ -1733,6 +1919,17 @@ export default function FleetLinkApp() {
                             </button>
                           ))}
                         </div>
+                      </div>
+
+                      {/* Test Delivery Button */}
+                      <div>
+                        <button
+                          onClick={() => testDeliveryNotifications(selectedVehicle.vehicle_id)}
+                          className="w-full px-3 py-2 bg-purple-500 text-white rounded text-sm font-medium hover:bg-purple-600 transition-colors"
+                        >
+                          🧪 Test Delivery Notification
+                        </button>
+                        <div className="text-xs text-slate-500 mt-1">Click to test if notifications work</div>
                       </div>
 
                       {/* Stop Button */}

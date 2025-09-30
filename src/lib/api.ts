@@ -1,9 +1,5 @@
 export const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-// Local Storage Keys
-const VEHICLES_STORAGE_KEY = 'fleetlink_vehicles';
-const PACKAGES_STORAGE_KEY = 'fleetlink_packages';
-
 export type Package = {
   id: string;
   destination: {
@@ -17,7 +13,6 @@ export type Package = {
   actualDeliveryTime?: string;
   recipientName?: string;
   packageType?: string;
-  vehicleId?: string; // Add vehicle assignment
 };
 
 export type Vehicle = {
@@ -25,7 +20,7 @@ export type Vehicle = {
   driver?: string;
   status?: "active"|"warning"|"danger"|"idle";
   lat?: number; lon?: number; speed?: number;
-  next_stop?: string; packages?: Package[]; eta?: string;
+  next_stop?: string; packages?: number | Package[]; eta?: string;
   location?: string;
   route?: {
     waypoints: Array<{
@@ -40,96 +35,6 @@ export type Vehicle = {
     totalDuration?: number;
   };
 };
-
-// Local Storage Utilities
-function getFromStorage<T>(key: string, defaultValue: T): T {
-  try {
-    const stored = localStorage.getItem(key);
-    return stored ? JSON.parse(stored) : defaultValue;
-  } catch (error) {
-    console.error(`Error reading from localStorage for key ${key}:`, error);
-    return defaultValue;
-  }
-}
-
-function saveToStorage<T>(key: string, data: T): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(data));
-  } catch (error) {
-    console.error(`Error saving to localStorage for key ${key}:`, error);
-  }
-}
-
-// Initialize default data if not exists
-function initializeDefaultData() {
-  const existingVehicles = getFromStorage<Vehicle[]>(VEHICLES_STORAGE_KEY, []);
-  const existingPackages = getFromStorage<Package[]>(PACKAGES_STORAGE_KEY, []);
-  
-  if (existingVehicles.length === 0) {
-    const defaultVehicles: Vehicle[] = [
-      {
-        vehicle_id: "TRUCK-001",
-        driver: "Mike Johnson",
-        status: "active",
-        location: "Downtown District",
-        lat: 37.7749,
-        lon: -122.4194,
-        speed: 35,
-        next_stop: "Westfield Mall",
-        packages: [],
-        eta: "2:45 PM"
-      },
-      {
-        vehicle_id: "TRUCK-002",
-        driver: "Sarah Chen", 
-        status: "active",
-        location: "Industrial Zone",
-        lat: 37.7849,
-        lon: -122.4094,
-        speed: 28,
-        next_stop: "Tech Campus",
-        packages: [],
-        eta: "3:15 PM"
-      }
-    ];
-    saveToStorage(VEHICLES_STORAGE_KEY, defaultVehicles);
-  }
-  
-  if (existingPackages.length === 0) {
-    const defaultPackages: Package[] = [
-      {
-        id: "PKG-001",
-        destination: {
-          address: "123 Main St, Downtown",
-          lat: 37.7849,
-          lng: -122.4094
-        },
-        priority: "high",
-        status: "pending",
-        estimatedDeliveryTime: "2:45 PM",
-        recipientName: "John Doe",
-        packageType: "Electronics"
-      },
-      {
-        id: "PKG-002",
-        destination: {
-          address: "456 Oak Ave, Midtown", 
-          lat: 37.7749,
-          lng: -122.4194
-        },
-        priority: "medium",
-        status: "pending",
-        estimatedDeliveryTime: "3:15 PM",
-        recipientName: "Jane Smith",
-        packageType: "Clothing"
-      }
-    ];
-    saveToStorage(PACKAGES_STORAGE_KEY, defaultPackages);
-  }
-}
-
-// Initialize on import
-initializeDefaultData();
 
 export type Driver = {
   id: string;
@@ -148,274 +53,341 @@ export type TrafficEvent = {
 
 // Packages API
 export async function getPackages(): Promise<Package[]> {
-  // Always use local storage first
-  const localPackages = getFromStorage<Package[]>(PACKAGES_STORAGE_KEY, []);
-  return localPackages;
-}
-
-export async function addPackage(packageData: Omit<Package, 'id'>): Promise<Package> {
-  const packages = getFromStorage<Package[]>(PACKAGES_STORAGE_KEY, []);
-  const newPackage: Package = {
-    id: `PKG-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    ...packageData
-  };
-  
-  packages.push(newPackage);
-  saveToStorage(PACKAGES_STORAGE_KEY, packages);
-  
-  // Also update the vehicle's packages if assigned
-  if (newPackage.vehicleId) {
-    await assignPackageToVehicle(newPackage.id, newPackage.vehicleId);
+  try {
+    const r = await fetch(`${API_BASE}/packages`);
+    if (!r.ok) throw new Error("Failed to load packages");
+    return r.json();
+  } catch (error) {
+    console.warn("Using mock data - backend not available");
+    return [
+      {
+        id: "PKG-001",
+        destination: {
+          address: "123 Main St, Downtown",
+          lat: 37.7849,
+          lng: -122.4094
+        },
+        priority: "high",
+        status: "in_transit",
+        estimatedDeliveryTime: "2:45 PM",
+        recipientName: "John Doe",
+        packageType: "Electronics"
+      },
+      {
+        id: "PKG-002",
+        destination: {
+          address: "456 Oak Ave, Midtown", 
+          lat: 37.7749,
+          lng: -122.4194
+        },
+        priority: "medium",
+        status: "pending",
+        estimatedDeliveryTime: "3:15 PM",
+        recipientName: "Jane Smith",
+        packageType: "Clothing"
+      },
+      {
+        id: "PKG-003",
+        destination: {
+          address: "789 Pine Rd, Uptown",
+          lat: 37.7649,
+          lng: -122.4294
+        },
+        priority: "low",
+        status: "pending",
+        estimatedDeliveryTime: "4:20 PM",
+        recipientName: "Bob Johnson",
+        packageType: "Books"
+      }
+    ];
   }
-  
-  return newPackage;
 }
 
 export async function assignPackageToVehicle(packageId: string, vehicleId: string) {
-  const packages = getFromStorage<Package[]>(PACKAGES_STORAGE_KEY, []);
-  const vehicles = getFromStorage<Vehicle[]>(VEHICLES_STORAGE_KEY, []);
-  
-  // Update package assignment
-  const packageIndex = packages.findIndex(p => p.id === packageId);
-  if (packageIndex >= 0) {
-    packages[packageIndex].vehicleId = vehicleId;
-    saveToStorage(PACKAGES_STORAGE_KEY, packages);
+  try {
+    const r = await fetch(`${API_BASE}/packages/${packageId}/assign`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ vehicleId }),
+    });
+    if (!r.ok) throw new Error("Failed to assign package");
+    return r.json();
+  } catch (error) {
+    console.warn("Using mock response - backend not available");
+    return { success: true };
   }
-  
-  // Update vehicle packages
-  const vehicleIndex = vehicles.findIndex(v => v.vehicle_id === vehicleId);
-  if (vehicleIndex >= 0) {
-    const vehiclePackages = packages.filter(p => p.vehicleId === vehicleId);
-    vehicles[vehicleIndex].packages = vehiclePackages;
-    saveToStorage(VEHICLES_STORAGE_KEY, vehicles);
-  }
-  
-  return { success: true };
 }
 
 export async function updatePackageStatus(packageId: string, status: Package['status']) {
-  const packages = getFromStorage<Package[]>(PACKAGES_STORAGE_KEY, []);
-  const packageIndex = packages.findIndex(p => p.id === packageId);
-  
-  if (packageIndex >= 0) {
-    packages[packageIndex].status = status;
-    if (status === 'delivered') {
-      packages[packageIndex].actualDeliveryTime = new Date().toLocaleTimeString();
-    }
-    saveToStorage(PACKAGES_STORAGE_KEY, packages);
+  try {
+    const r = await fetch(`${API_BASE}/packages/${packageId}/status`, {
+      method: "PATCH",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ status }),
+    });
+    if (!r.ok) throw new Error("Failed to update package status");
+    return r.json();
+  } catch (error) {
+    console.warn("Using mock response - backend not available");
+    return { success: true };
   }
-  
-  return { success: true };
 }
 
 // Vehicle API
 export async function getVehicles(): Promise<Vehicle[]> {
-  const vehicles = getFromStorage<Vehicle[]>(VEHICLES_STORAGE_KEY, []);
-  const packages = getFromStorage<Package[]>(PACKAGES_STORAGE_KEY, []);
-  
-  // Sync packages with vehicles
-  return vehicles.map(vehicle => ({
-    ...vehicle,
-    packages: packages.filter(p => p.vehicleId === vehicle.vehicle_id)
-  }));
-}
-
-export async function addVehicle(payload: Partial<Vehicle> & {vehicle_id: string}): Promise<Vehicle> {
-  const vehicles = getFromStorage<Vehicle[]>(VEHICLES_STORAGE_KEY, []);
-  
-  // Check if vehicle already exists
-  const existingIndex = vehicles.findIndex(v => v.vehicle_id === payload.vehicle_id);
-  if (existingIndex >= 0) {
-    throw new Error(`Vehicle with ID ${payload.vehicle_id} already exists`);
+  try {
+    const r = await fetch(`${API_BASE}/vehicles`);
+    if (!r.ok) throw new Error("Failed to load vehicles");
+    return r.json();
+  } catch (error) {
+    console.warn("Using mock data - backend not available");
+    // Return mock data as fallback
+    return [
+      {
+        vehicle_id: "TRUCK-001",
+        driver: "Mike Johnson",
+        status: "active",
+        location: "Downtown District",
+        speed: 35,
+        next_stop: "Westfield Mall",
+        packages: 8,
+        eta: "2:45 PM"
+      },
+      {
+        vehicle_id: "TRUCK-002",
+        driver: "Sarah Chen", 
+        status: "active",
+        location: "Industrial Zone",
+        speed: 28,
+        next_stop: "Tech Campus",
+        packages: 12,
+        eta: "3:15 PM"
+      },
+      {
+        vehicle_id: "TRUCK-003",
+        driver: "David Rodriguez",
+        status: "warning",
+        location: "Highway 101",
+        speed: 15,
+        next_stop: "City Center",
+        packages: 6,
+        eta: "4:20 PM"
+      },
+      {
+        vehicle_id: "TRUCK-004",
+        driver: "Emma Wilson",
+        status: "idle",
+        location: "Depot",
+        speed: 0,
+        next_stop: "Awaiting Assignment",
+        packages: 0,
+        eta: "--"
+      }
+    ];
   }
-  
-  const newVehicle: Vehicle = {
-    vehicle_id: payload.vehicle_id,
-    driver: payload.driver || "Unknown Driver",
-    status: payload.status || "idle",
-    lat: payload.lat || 37.7749,
-    lon: payload.lon || -122.4194,
-    speed: payload.speed || 0,
-    location: payload.location || "Unknown Location",
-    packages: [],
-    eta: payload.eta || "--",
-    next_stop: payload.next_stop || "Awaiting Assignment"
-  };
-  
-  vehicles.push(newVehicle);
-  saveToStorage(VEHICLES_STORAGE_KEY, vehicles);
-  
-  return newVehicle;
 }
 
-export async function updateVehicle(vehicleId: string, updates: Partial<Vehicle>): Promise<Vehicle> {
-  const vehicles = getFromStorage<Vehicle[]>(VEHICLES_STORAGE_KEY, []);
-  const vehicleIndex = vehicles.findIndex(v => v.vehicle_id === vehicleId);
-  
-  if (vehicleIndex < 0) {
-    throw new Error(`Vehicle with ID ${vehicleId} not found`);
+export async function addVehicle(payload: Partial<Vehicle> & {vehicle_id: string}) {
+  try {
+    const r = await fetch(`${API_BASE}/vehicles`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error("Failed to add vehicle");
+    return r.json();
+  } catch (error) {
+    console.warn("Using mock response - backend not available");
+    return payload;
   }
-  
-  vehicles[vehicleIndex] = { ...vehicles[vehicleIndex], ...updates };
-  saveToStorage(VEHICLES_STORAGE_KEY, vehicles);
-  
-  return vehicles[vehicleIndex];
 }
 
-export async function removeVehicle(vehicleId: string): Promise<void> {
-  const vehicles = getFromStorage<Vehicle[]>(VEHICLES_STORAGE_KEY, []);
-  const packages = getFromStorage<Package[]>(PACKAGES_STORAGE_KEY, []);
-  
-  // Remove vehicle
-  const filteredVehicles = vehicles.filter(v => v.vehicle_id !== vehicleId);
-  saveToStorage(VEHICLES_STORAGE_KEY, filteredVehicles);
-  
-  // Unassign packages from this vehicle
-  const updatedPackages = packages.map(p => 
-    p.vehicleId === vehicleId ? { ...p, vehicleId: undefined } : p
-  );
-  saveToStorage(PACKAGES_STORAGE_KEY, updatedPackages);
-}
-
-// Simulation API (local mock responses)
+// Simulation API
 export async function startSimulation() {
-  console.log("Simulation started (local mode)");
-  return { success: true, message: "Simulation started" };
+  try {
+    const r = await fetch(`${API_BASE}/simulate/start`, { method: "POST" });
+    if (!r.ok) throw new Error("Failed to start simulation");
+    return r.json();
+  } catch (error) {
+    console.warn("Using mock response - backend not available");
+    return { success: true, message: "Simulation started" };
+  }
 }
 
 export async function pauseSimulation() {
-  console.log("Simulation paused (local mode)");
-  return { success: true, message: "Simulation paused" };
+  try {
+    const r = await fetch(`${API_BASE}/simulate/pause`, { method: "POST" });
+    if (!r.ok) throw new Error("Failed to pause simulation");
+    return r.json();
+  } catch (error) {
+    console.warn("Using mock response - backend not available");
+    return { success: true, message: "Simulation paused" };
+  }
 }
 
 export async function stopSimulation() {
-  console.log("Simulation stopped (local mode)");
-  return { success: true, message: "Simulation stopped" };
+  try {
+    const r = await fetch(`${API_BASE}/simulate/stop`, { method: "POST" });
+    if (!r.ok) throw new Error("Failed to stop simulation");
+    return r.json();
+  } catch (error) {
+    console.warn("Using mock response - backend not available");
+    return { success: true, message: "Simulation stopped" };
+  }
 }
 
-// Driver API (local mock responses)
+// Driver API
 export async function getDrivers(): Promise<Driver[]> {
-  return [
-    { id: "D001", name: "Mike Johnson", vehicleType: "Truck", status: "available" },
-    { id: "D002", name: "Sarah Chen", vehicleType: "Van", status: "active" },
-    { id: "D003", name: "David Rodriguez", vehicleType: "Truck", status: "available" },
-    { id: "D004", name: "Emma Wilson", vehicleType: "Van", status: "available" },
-  ];
+  try {
+    const r = await fetch(`${API_BASE}/drivers`);
+    if (!r.ok) throw new Error("Failed to load drivers");
+    return r.json();
+  } catch (error) {
+    console.warn("Using mock data - backend not available");
+    return [
+      { id: "D001", name: "Mike Johnson", vehicleType: "Truck", status: "available" },
+      { id: "D002", name: "Sarah Chen", vehicleType: "Van", status: "active" },
+    ];
+  }
 }
 
 export async function addDriver(driver: Omit<Driver, 'id'>): Promise<Driver> {
-  return {
-    id: `D${Date.now()}`,
-    ...driver
-  };
+  try {
+    const r = await fetch(`${API_BASE}/drivers`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(driver),
+    });
+    if (!r.ok) throw new Error("Failed to add driver");
+    return r.json();
+  } catch (error) {
+    console.warn("Using mock response - backend not available");
+    return {
+      id: `D${Date.now()}`,
+      ...driver
+    };
+  }
 }
 
-// Traffic Events API (local mock responses)
+// Traffic Events API
 export async function getTrafficEvents(): Promise<TrafficEvent[]> {
-  return [
-    {
-      id: "T001",
-      type: "heavy_traffic",
-      location: "Highway 101 North",
-      severity: "medium",
-      duration: 45
-    }
-  ];
+  try {
+    const r = await fetch(`${API_BASE}/traffic-events`);
+    if (!r.ok) throw new Error("Failed to load traffic events");
+    return r.json();
+  } catch (error) {
+    console.warn("Using mock data - backend not available");
+    return [];
+  }
 }
 
 export async function addTrafficEvent(event: Omit<TrafficEvent, 'id'>): Promise<TrafficEvent> {
-  return {
-    id: `T${Date.now()}`,
-    ...event
-  };
+  try {
+    const r = await fetch(`${API_BASE}/traffic-events`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(event),
+    });
+    if (!r.ok) throw new Error("Failed to add traffic event");
+    return r.json();
+  } catch (error) {
+    console.warn("Using mock response - backend not available");
+    return {
+      id: `T${Date.now()}`,
+      ...event
+    };
+  }
 }
 
 export async function removeTrafficEvent(id: string): Promise<void> {
-  console.log(`Removing traffic event ${id} (local mode)`);
-}
-
-// Dashboard Stats API (calculated from local data)
-export async function getDashboardStats() {
-  const vehicles = await getVehicles();
-  const packages = await getPackages();
-  
-  const activeVehicles = vehicles.filter(v => v.status === 'active').length;
-  const totalVehicles = vehicles.length;
-  const totalPackages = packages.length;
-  const completedDeliveries = packages.filter(p => p.status === 'delivered').length;
-  const inTransitPackages = packages.filter(p => p.status === 'in_transit').length;
-  
-  return {
-    activeVehicles,
-    totalVehicles,
-    deliveriesToday: totalPackages,
-    completedDeliveries,
-    inTransitDeliveries: inTransitPackages,
-    avgDeliveryTime: 24,
-    coveragePercentage: Math.min(100, (activeVehicles / Math.max(1, totalVehicles)) * 100)
-  };
-}
-
-// Alerts API (local mock responses)
-export async function getAlerts() {
-  const vehicles = await getVehicles();
-  const alerts = [];
-  
-  // Generate dynamic alerts based on vehicle status
-  vehicles.forEach(vehicle => {
-    if (vehicle.status === 'warning') {
-      alerts.push({
-        id: Date.now() + Math.random(),
-        message: `${vehicle.vehicle_id} experiencing delays`,
-        type: "warning",
-        time: "2 min ago"
-      });
-    }
-  });
-  
-  // Add some static alerts
-  alerts.push(
-    { id: 2, message: "New delivery request - Priority", type: "info", time: "5 min ago" },
-    { id: 3, message: "Route optimization complete", type: "success", time: "8 min ago" }
-  );
-  
-  return alerts;
-}
-
-// Activity API (local mock responses)
-export async function getRecentActivity() {
-  const vehicles = await getVehicles();
-  const packages = await getPackages();
-  
-  const activity = [];
-  
-  // Generate dynamic activity based on current data
-  vehicles.slice(0, 3).forEach((vehicle, index) => {
-    activity.push({
-      id: index + 1,
-      action: `Route assigned to ${vehicle.vehicle_id}`,
-      driver: vehicle.driver || "Unknown Driver",
-      time: `${(index + 1) * 2} min ago`
+  try {
+    const r = await fetch(`${API_BASE}/traffic-events/${id}`, {
+      method: "DELETE",
     });
-  });
-  
-  return activity;
+    if (!r.ok) throw new Error("Failed to remove traffic event");
+  } catch (error) {
+    console.warn("Using mock response - backend not available");
+  }
 }
 
-// Vehicle Actions API (using local storage)
-export async function updateVehicleStatus(vehicleId: string, status: Vehicle['status']) {
-  const vehicles = getFromStorage<Vehicle[]>(VEHICLES_STORAGE_KEY, []);
-  const vehicleIndex = vehicles.findIndex(v => v.vehicle_id === vehicleId);
-  
-  if (vehicleIndex >= 0) {
-    vehicles[vehicleIndex].status = status;
-    saveToStorage(VEHICLES_STORAGE_KEY, vehicles);
+// Dashboard Stats API
+export async function getDashboardStats() {
+  try {
+    const r = await fetch(`${API_BASE}/dashboard/stats`);
+    if (!r.ok) throw new Error("Failed to load dashboard stats");
+    return r.json();
+  } catch (error) {
+    console.warn("Using mock data - backend not available");
+    return {
+      activeVehicles: 8,
+      totalVehicles: 10,
+      deliveriesToday: 47,
+      completedDeliveries: 12,
+      avgDeliveryTime: 24,
+      coveragePercentage: 85
+    };
   }
-  
-  return { success: true };
+}
+
+// Alerts API
+export async function getAlerts() {
+  try {
+    const r = await fetch(`${API_BASE}/alerts`);
+    if (!r.ok) throw new Error("Failed to load alerts");
+    return r.json();
+  } catch (error) {
+    console.warn("Using mock data - backend not available");
+    return [
+      { id: 1, message: "TRUCK-003 experiencing traffic delays", type: "warning", time: "2 min ago" },
+      { id: 2, message: "New delivery request - Priority", type: "info", time: "5 min ago" },
+      { id: 3, message: "TRUCK-001 completed delivery", type: "success", time: "8 min ago" }
+    ];
+  }
+}
+
+// Activity API  
+export async function getRecentActivity() {
+  try {
+    const r = await fetch(`${API_BASE}/activity/recent`);
+    if (!r.ok) throw new Error("Failed to load recent activity");
+    return r.json();
+  } catch (error) {
+    console.warn("Using mock data - backend not available");
+    return [
+      { id: 1, action: "Route assigned to TRUCK-002", driver: "Sarah Chen", time: "1 min ago" },
+      { id: 2, action: "Delivery completed", driver: "Mike Johnson", time: "5 min ago" },
+      { id: 3, action: "Vehicle maintenance reminder", driver: "David Rodriguez", time: "12 min ago" },
+    ];
+  }
+}
+
+// Vehicle Actions API
+export async function updateVehicleStatus(vehicleId: string, status: Vehicle['status']) {
+  try {
+    const r = await fetch(`${API_BASE}/vehicles/${vehicleId}/status`, {
+      method: "PATCH",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ status }),
+    });
+    if (!r.ok) throw new Error("Failed to update vehicle status");
+    return r.json();
+  } catch (error) {
+    console.warn("Using mock response - backend not available");
+    return { success: true };
+  }
 }
 
 export async function assignRoute(vehicleId: string, route: string) {
-  console.log(`Assigning route to ${vehicleId}: ${route} (local mode)`);
-  return { success: true };
+  try {
+    const r = await fetch(`${API_BASE}/vehicles/${vehicleId}/route`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ route }),
+    });
+    if (!r.ok) throw new Error("Failed to assign route");
+    return r.json();
+  } catch (error) {
+    console.warn("Using mock response - backend not available");
+    return { success: true };
+  }
 }
