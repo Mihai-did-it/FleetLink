@@ -2,9 +2,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Truck, MapPin, Clock, Package, MoreHorizontal, Navigation, Pause, AlertTriangle, CheckCircle, Eye } from "lucide-react";
+import { Truck, MapPin, Clock, Package, MoreHorizontal, Navigation, Pause, AlertTriangle, CheckCircle, Eye, Trash } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { updateVehicleStatus, assignRoute } from "@/lib/api";
+import { deleteVehicleCascade } from "@/lib/deleteVehicleCascade";
 import { useToast } from "@/hooks/use-toast";
 import { logAction } from "./ActionLogger";
 
@@ -21,7 +22,6 @@ interface VehicleCardProps {
   };
   onVehicleUpdate?: () => void;
   onViewDetails?: (vehicle: VehicleCardProps['vehicle']) => void;
-  onStartSimulation?: (vehicle: VehicleCardProps['vehicle']) => void;
 }
 
 const statusConfig = {
@@ -44,9 +44,28 @@ const statusConfig = {
 };
 
 export function VehicleCard({ vehicle, onVehicleUpdate, onViewDetails }: VehicleCardProps) {
+  const handleDeleteVehicle = async () => {
+    try {
+      logAction(`Deleting vehicle ${vehicle.id} and its packages...`, "info");
+      await deleteVehicleCascade(vehicle.id);
+      toast({
+        title: "Vehicle Deleted",
+        description: `${vehicle.id} and its packages have been deleted`,
+      });
+      logAction(`Vehicle ${vehicle.id} deleted`, "success");
+      onVehicleUpdate?.();
+    } catch (error) {
+      console.error("Failed to delete vehicle:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete vehicle",
+        variant: "destructive",
+      });
+  logAction(`Failed to delete vehicle ${vehicle.id}`, "error");
+    }
+  };
   const status = statusConfig[vehicle.status];
   const { toast } = useToast();
-  // ...existing code...
   
   const handleStatusUpdate = async (newStatus: typeof vehicle.status) => {
     try {
@@ -130,6 +149,10 @@ export function VehicleCard({ vehicle, onVehicleUpdate, onViewDetails }: Vehicle
                 <AlertTriangle className="h-4 w-4 mr-2" />
                 Mark as Warning
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleDeleteVehicle} style={{ color: 'red' }}>
+                <Trash className="h-4 w-4 mr-2" />
+                Delete Vehicle
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -181,13 +204,13 @@ export function VehicleCard({ vehicle, onVehicleUpdate, onViewDetails }: Vehicle
               View Details
             </Button>
             <Button
-              onClick={() => onStartSimulation?.(vehicle)}
-              variant="default"
+              onClick={handleDeleteVehicle}
+              variant="destructive"
               size="sm"
               className="w-full"
             >
-              <Truck className="h-4 w-4 mr-2" />
-              Start Delivery
+              <Trash className="h-4 w-4 mr-2" />
+              Delete Vehicle
             </Button>
           </div>
         </div>

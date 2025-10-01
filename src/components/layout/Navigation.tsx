@@ -1,5 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Truck, Users, Route, BarChart3 } from "lucide-react";
+import { Trash } from "lucide-react";
+import { deleteVehicleCascade } from "@/lib/deleteVehicleCascade";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 interface NavigationProps {
@@ -8,6 +11,26 @@ interface NavigationProps {
 }
 
 export function Navigation({ activeView, onViewChange }: NavigationProps) {
+  const { toast } = useToast();
+  const handleDeleteVehicle = async () => {
+    // Prompt for vehicle ID
+    const vehicleId = prompt("Enter Vehicle ID to delete:");
+    if (!vehicleId) return;
+    try {
+      await deleteVehicleCascade(vehicleId);
+      toast({
+        title: "Vehicle Deleted",
+        description: `Vehicle ${vehicleId} and its packages have been deleted`,
+        variant: "destructive",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete vehicle",
+        variant: "destructive",
+      });
+    }
+  };
   return (
     <nav className="flex items-center justify-between bg-card border-b px-6 py-4">
       <div className="flex items-center space-x-8">
@@ -39,6 +62,7 @@ export function Navigation({ activeView, onViewChange }: NavigationProps) {
       </div>
 
       <div className="flex items-center space-x-4">
+  <Button variant="default" size="sm" onClick={() => alert('TEST BUTTON CLICKED!')}>TEST BUTTON</Button>
         <div className="flex items-center space-x-2 text-sm">
           <div className="flex items-center space-x-1">
             <div className="w-2 h-2 bg-fleet-active rounded-full"></div>
@@ -52,6 +76,10 @@ export function Navigation({ activeView, onViewChange }: NavigationProps) {
         <Button variant="outline" size="sm">
           <Users className="h-4 w-4 mr-2" />
           Team
+        </Button>
+        <Button variant="destructive" size="sm" onClick={handleDeleteVehicle}>
+          <Trash className="h-4 w-4 mr-2" />
+          Delete Vehicle
         </Button>
       </div>
     </nav>

@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Trash } from 'lucide-react';
+import { deleteVehicleCascade } from '@/lib/deleteVehicleCascade';
+import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -58,6 +61,7 @@ interface VehicleDetailsDrawerProps {
 }
 
 export function VehicleDetailsDrawer({ vehicle, isOpen, onClose, onVehicleUpdate }: VehicleDetailsDrawerProps) {
+  const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [editedVehicle, setEditedVehicle] = useState<Vehicle | null>(null);
   const [packages, setPackages] = useState<Package[]>([]);
@@ -171,7 +175,7 @@ export function VehicleDetailsDrawer({ vehicle, isOpen, onClose, onVehicleUpdate
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex">
+  <div className="fixed inset-0 z-50 flex flex-col">
       {/* Backdrop */}
       <div 
         className="flex-1 bg-black/20 backdrop-blur-sm"
@@ -187,6 +191,52 @@ export function VehicleDetailsDrawer({ vehicle, isOpen, onClose, onVehicleUpdate
               <Truck className="h-6 w-6 text-blue-400" />
               <h2 className="text-xl font-semibold text-white">{vehicle.vehicle_id}</h2>
             </div>
+      {/* Delete Vehicle Button */}
+      {vehicle && (
+        <div className="p-6 border-t border-slate-700/50">
+          <Button
+            onClick={async () => {
+              await deleteVehicleCascade(vehicle.vehicle_id);
+              toast({
+                title: "Vehicle Deleted",
+                description: `Vehicle ${vehicle.vehicle_id} and its packages have been deleted`,
+                variant: "destructive",
+              });
+              onVehicleUpdate();
+              onClose();
+            }}
+            variant="destructive"
+            size="sm"
+            className="w-full"
+          >
+            <Trash className="h-4 w-4 mr-2" />
+            Delete Vehicle
+          </Button>
+        </div>
+      )}
+      {/* Delete Vehicle Button */}
+      {vehicle && (
+        <div className="p-6 border-t border-slate-700/50">
+          <Button
+            onClick={async () => {
+              await deleteVehicleCascade(vehicle.vehicle_id);
+              toast({
+                title: "Vehicle Deleted",
+                description: `Vehicle ${vehicle.vehicle_id} and its packages have been deleted`,
+                variant: "destructive",
+              });
+              onVehicleUpdate();
+              onClose();
+            }}
+            variant="destructive"
+            size="sm"
+            className="w-full"
+          >
+            <Trash className="h-4 w-4 mr-2" />
+            Delete Vehicle
+          </Button>
+        </div>
+      )}
             <div className={`w-3 h-3 rounded-full ${getStatusColor(vehicle.status)}`} />
           </div>
           <div className="flex items-center space-x-2">
@@ -422,6 +472,26 @@ export function VehicleDetailsDrawer({ vehicle, isOpen, onClose, onVehicleUpdate
               </Button>
             </div>
           </div>
+        )}
+        {!isEditing && vehicle && (
+          <div className="p-6 border-t border-slate-700/50">
+            <Button
+              onClick={async () => {
+                if (window.confirm(`Delete vehicle ${vehicle.vehicle_id} and all its packages?`)) {
+                  const { deleteVehicleCascade } = await import('@/lib/deleteVehicleCascade');
+                  await deleteVehicleCascade(vehicle.vehicle_id);
+                  window.location.reload();
+                }
+              }}
+              variant="destructive"
+              size="sm"
+              className="w-full"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Vehicle
+            </Button>
+          </div>
+        )}
         )}
       </div>
     </div>

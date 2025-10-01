@@ -68,6 +68,8 @@ export default function FleetLinkApp() {
   const [showRoutes, setShowRoutes] = useState(true); // Default to ON - routes visible by default
   const [failedVehicles, setFailedVehicles] = useState<Set<string>>(new Set()); // Persistent failed vehicle tracking
   const [loading, setLoading] = useState(false);
+  // State for delete dropdown in top bar
+  const [showDeleteDropdown, setShowDeleteDropdown] = useState(false);
   
   // New delivery orchestrator for waypoint-based deliveries
   const deliveryOrchestratorRef = useRef<DeliveryOrchestrator | null>(null);
@@ -123,7 +125,7 @@ export default function FleetLinkApp() {
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/streets-v12',
       center: [-122.4194, 37.7749], // San Francisco
-      zoom: 12,
+      zoom: 13,
       attributionControl: false,
     });
 
@@ -1771,6 +1773,42 @@ export default function FleetLinkApp() {
               {/* Quick Action Buttons */}
               <div className="flex items-center space-x-4 text-sm">
                 <div className="flex items-center space-x-2 border-l border-white/20 pl-4">
+                  <div className="relative">
+                    <button
+                      className="px-4 py-2.5 text-xs font-bold rounded-xl bg-red-600/60 text-red-50 hover:bg-red-600/80 transition-all flex items-center gap-2 shadow-xl border border-red-400/40 backdrop-blur-sm ring-1 ring-red-400/20"
+                      onClick={() => setShowDeleteDropdown((v) => !v)}
+                      title="Delete Vehicle"
+                    >
+                      <span className="font-bold">Delete</span>
+                      <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeWidth="2" d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    {showDeleteDropdown && (
+                      <div className="absolute z-50 mt-2 w-48 bg-white rounded shadow-xl border border-slate-200 text-slate-900">
+                        <div className="p-2 font-bold text-xs border-b">Delete Vehicle</div>
+                        {vehicles.length === 0 ? (
+                          <div className="p-2 text-xs text-slate-400">No vehicles available</div>
+                        ) : (
+                          vehicles.map((v) => (
+                            <button
+                              key={v.vehicle_id}
+                              className="w-full text-left px-3 py-2 hover:bg-red-100 text-xs border-b last:border-b-0"
+                              onClick={async () => {
+                                if (window.confirm(`Delete vehicle ${v.vehicle_id} and all its packages?`)) {
+                                  const { deleteVehicleCascade } = await import('@/lib/deleteVehicleCascade');
+                                  await deleteVehicleCascade(v.vehicle_id);
+                                  setShowDeleteDropdown(false);
+                                  // Reload vehicles and packages after deletion
+                                  await loadVehiclesAndPackages();
+                                }
+                              }}
+                            >
+                              {v.vehicle_id} <span className="text-red-500 font-bold">Delete</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <button
                     onClick={() => handleMapPickerToggle(
                       true, 

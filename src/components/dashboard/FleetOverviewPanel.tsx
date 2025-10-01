@@ -175,6 +175,19 @@ export function FleetOverviewPanel({
                               />
                             </div>
                           )}
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`Delete vehicle ${vehicle.vehicle_id} and all its packages?`)) {
+                                const { deleteVehicleCascade } = await import('@/lib/deleteVehicleCascade');
+                                await deleteVehicleCascade(vehicle.vehicle_id);
+                                window.location.reload();
+                              }
+                            }}
+                            className="mt-3 w-full px-3 py-2 rounded bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition"
+                          >
+                            Delete Vehicle
+                          </button>
                         </div>
                       </div>
                     </Card>

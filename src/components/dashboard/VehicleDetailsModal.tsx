@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Separator } from "@/components/ui/separator";
 import { Truck, MapPin, Clock, Package, Navigation, Phone, User, AlertTriangle, CheckCircle, Pause } from "lucide-react";
 import { Vehicle, updateVehicleStatus, assignRoute } from "@/lib/api";
+import { VehicleDeleteButton } from "./VehicleDeleteButton";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 
@@ -237,6 +238,7 @@ export function VehicleDetailsModal({ vehicle, isOpen, onClose, onVehicleUpdate 
                   <AlertTriangle className="h-4 w-4" />
                   <span>Mark Warning</span>
                 </Button>
+                <VehicleDeleteButton vehicleId={vehicle.id} onVehicleUpdate={onVehicleUpdate} />
               </div>
             </CardContent>
           </Card>
@@ -245,6 +247,21 @@ export function VehicleDetailsModal({ vehicle, isOpen, onClose, onVehicleUpdate 
         <div className="flex justify-end space-x-2 pt-4">
           <Button variant="outline" onClick={onClose}>
             Close
+          </Button>
+          <Button
+            onClick={async () => {
+              if (vehicle && window.confirm(`Delete vehicle ${vehicle.id} and all its packages?`)) {
+                const { deleteVehicleCascade } = await import('@/lib/deleteVehicleCascade');
+                await deleteVehicleCascade(vehicle.id);
+                window.location.reload();
+              }
+            }}
+            variant="destructive"
+            size="sm"
+            className="w-full"
+          >
+            <Trash className="h-4 w-4 mr-2" />
+            Delete Vehicle
           </Button>
         </div>
       </DialogContent>
