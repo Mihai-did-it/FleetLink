@@ -1,4 +1,27 @@
-import { type Vehicle, type Package, type DeliveryRoute } from '@/lib/local-api'
+
+export interface Vehicle {
+  vehicle_id: string;
+  name: string;
+  status: string;
+  progress?: number;
+  [key: string]: any;
+}
+
+export interface Package {
+  package_id: string;
+  vehicle_id?: string;
+  status: string;
+  destination_lat?: number;
+  destination_lng?: number;
+  [key: string]: any;
+}
+
+export interface DeliveryRoute {
+  route_id: string;
+  vehicle_id: string;
+  waypoints: Array<{ lat: number; lng: number }>;
+  [key: string]: any;
+}
 
 export interface VehicleWithPackages extends Vehicle {
   packages: Package[]

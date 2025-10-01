@@ -10,9 +10,6 @@ import {
   addPackage,
   startSimulation,
   stopSimulation,
-  geocodeAddress,
-  subscribeToVehicles,
-  subscribeToPackages,
   saveDeliveryRoute,
   getDeliveryRoute,
   type Vehicle,
@@ -40,6 +37,8 @@ interface NewVehicle {
   id: string;
   driver: string;
   location: string;
+  lat: number;
+  lng: number;
 }
 
 interface NewPackage {
@@ -49,6 +48,8 @@ interface NewPackage {
   recipientName: string;
   packageType: string;
   priority: 'low' | 'medium' | 'high';
+  destination_lat: number;
+  destination_lng: number;
 }
 
 interface LocationSuggestion {
@@ -79,14 +80,16 @@ export default function FleetLinkApp() {
   const { toast } = useToast();
   
   // Form states
-  const [newVehicle, setNewVehicle] = useState<NewVehicle>({ id: '', driver: '', location: '' });
+  const [newVehicle, setNewVehicle] = useState<NewVehicle>({ id: '', driver: '', location: '', lat: 0, lng: 0 });
   const [newPackage, setNewPackage] = useState<NewPackage>({ 
     vehicleId: '', 
     destination: '', 
     weight: 0,
     recipientName: '',
     packageType: '',
-    priority: 'medium'
+    priority: 'medium',
+    destination_lat: 0,
+    destination_lng: 0
   });
   const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
@@ -181,42 +184,7 @@ export default function FleetLinkApp() {
   }, []);
 
   // Load vehicles and packages
-  useEffect(() => {
-    loadVehiclesAndPackages();
-    
-    // Add rate limiting to prevent infinite loops
-    let lastVehicleUpdate = 0;
-    let lastPackageUpdate = 0;
-    const RATE_LIMIT_MS = 1000; // Max 1 update per second
-    
-    // Set up real-time subscriptions
-    const vehicleSubscription = subscribeToVehicles(() => {
-      const now = Date.now();
-      if (now - lastVehicleUpdate > RATE_LIMIT_MS) {
-        console.log('🔔 Vehicle subscription triggered, reloading data');
-        lastVehicleUpdate = now;
-        loadVehiclesAndPackages();
-      } else {
-        console.log('⚠️ Vehicle update rate limited');
-      }
-    });
-    
-    const packageSubscription = subscribeToPackages(() => {
-      const now = Date.now();
-      if (now - lastPackageUpdate > RATE_LIMIT_MS) {
-        console.log('🔔 Package subscription triggered, reloading data');
-        lastPackageUpdate = now;
-        loadVehiclesAndPackages();
-      } else {
-        console.log('⚠️ Package update rate limited');
-      }
-    });
-
-    return () => {
-      vehicleSubscription.unsubscribe();
-      packageSubscription.unsubscribe();
-    };
-  }, []);
+  // Subscriptions removed: now use polling or Supabase real-time if needed
 
   // Initialize app
   useEffect(() => {
@@ -1276,31 +1244,22 @@ export default function FleetLinkApp() {
     
     setLoading(true);
     try {
-      // Get coordinates for the location
-      const coordinates = await geocodeAddress(newVehicle.location, mapboxToken);
-      
-      if (!coordinates) {
-        alert('Could not find coordinates for that location');
-        return;
-      }
-
+      // Geocoding removed: provide lat/lng directly or implement geocoding elsewhere
       const result = await addVehicle({
         vehicle_id: newVehicle.id,
         driver: newVehicle.driver,
-        lat: coordinates.lat,
-        lng: coordinates.lng,
+        lat: newVehicle.lat,
+        lng: newVehicle.lng,
         location: newVehicle.location,
         status: 'idle',
         speed: 0
       });
-
       if (result) {
-        console.log('✅ Vehicle added successfully:', result);
-        setNewVehicle({ id: '', driver: '', location: '' });
-        setLocationSuggestions([]);
-        setShowLocationSuggestions(false);
-        // Data will refresh automatically via subscription
-        alert('Vehicle added successfully!');
+  console.log('✅ Vehicle added successfully:', result);
+  setNewVehicle({ id: '', driver: '', location: '', lat: 0, lng: 0 });
+  setLocationSuggestions([]);
+  setShowLocationSuggestions(false);
+  alert('Vehicle added successfully!');
       } else {
         alert('Failed to add vehicle');
       }
@@ -1321,28 +1280,19 @@ export default function FleetLinkApp() {
     
     setLoading(true);
     try {
-      // Get coordinates for destination
-      const coordinates = await geocodeAddress(newPackage.destination, mapboxToken);
-      
-      if (!coordinates) {
-        alert('Could not find coordinates for that destination');
-        return;
-      }
-
+      // Geocoding removed: provide destination_lat/destination_lng directly or implement geocoding elsewhere
       const packageId = `PKG-${Date.now()}`;
-      
       const result = await addPackage({
         package_id: packageId,
         vehicle_id: newPackage.vehicleId,
         destination: newPackage.destination,
-        destination_lat: coordinates.lat,
-        destination_lng: coordinates.lng,
+        destination_lat: newPackage.destination_lat,
+        destination_lng: newPackage.destination_lng,
         weight: newPackage.weight,
         priority: newPackage.priority,
         recipient_name: newPackage.recipientName,
         package_type: newPackage.packageType
       });
-
       if (result) {
         console.log('✅ Package added successfully:', result);
         setNewPackage({ 
@@ -1351,9 +1301,10 @@ export default function FleetLinkApp() {
           weight: 0,
           recipientName: '',
           packageType: '',
-          priority: 'medium'
+          priority: 'medium',
+          destination_lat: 0,
+          destination_lng: 0
         });
-        // Data will refresh automatically via subscription
         alert('Package added successfully!');
       } else {
         alert('Failed to add package');
@@ -1380,12 +1331,15 @@ export default function FleetLinkApp() {
         const el = document.createElement('div');
         el.className = 'vehicle-marker';
         el.innerHTML = `
-          <div class="w-12 h-12 rounded-full border-3 border-white shadow-xl flex items-center justify-center text-white font-bold cursor-pointer transition-all hover:scale-110 ${
-            vehicle.status === 'on-time' ? 'bg-emerald-500' :
-            vehicle.status === 'delayed' ? 'bg-rose-500' :
-            vehicle.status === 'active' ? 'bg-blue-500' : 'bg-slate-400'
-          }">
-            🚛
+          <div style="width:48px;height:48px;border-radius:50%;border:3px solid white;box-shadow:0 2px 12px rgba(0,0,0,0.25);backdrop-filter:blur(8px);background:rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s;"
+            class="hover:scale-110">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="4" y="12" width="18" height="10" rx="3" fill="#3B82F6" stroke="#fff" stroke-width="2"/>
+              <rect x="22" y="16" width="6" height="6" rx="2" fill="#10B981" stroke="#fff" stroke-width="2"/>
+              <circle cx="9" cy="25" r="3" fill="#fff" stroke="#3B82F6" stroke-width="2"/>
+              <circle cx="25" cy="25" r="3" fill="#fff" stroke="#10B981" stroke-width="2"/>
+              <rect x="7" y="14" width="10" height="4" rx="1" fill="#fff" opacity="0.2"/>
+            </svg>
           </div>
         `;
 

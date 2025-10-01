@@ -278,8 +278,16 @@ export function VehiclesTab() {
               vehicle={vehicle} 
               onVehicleUpdate={loadVehicles}
               onViewDetails={handleViewDetails}
+              onStartSimulation={handleStartSimulation}
             />
           ))}
+  // Handler to start simulation for a vehicle
+  const handleStartSimulation = (vehicle) => {
+    // TODO: Connect to FleetLinkApp's startVehicleSimulation logic
+    // For now, just log
+    console.log('Start simulation for vehicle:', vehicle);
+    // You may need to lift this up to FleetLinkApp via context or props
+  };
         </div>
         {filteredVehicles.length === 0 && (
           <Card>

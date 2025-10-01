@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from '@/hooks/use-toast'
-import { addVehicle, geocodeAddress } from '@/lib/local-api'
+import { addVehicle } from '@/lib/local-api'
 import { LocationFinder } from '../common/LocationFinder'
 import { MapPin, Target } from 'lucide-react'
 
@@ -84,39 +84,22 @@ export function AddVehicleTab({ mapboxToken, onVehicleAdded, onMapPickerToggle }
     setLoading(true)
     
     try {
-      // Use coordinates from location finder if available, otherwise geocode
-      let lat = newVehicle.lat
-      let lng = newVehicle.lng
-      
-      console.log('🚛 AddVehicleTab: Coordinates check:', { lat, lng })
-      
-      if (!lat || !lng) {
-        console.log('🚛 AddVehicleTab: No coordinates, geocoding address:', newVehicle.location)
-        const coords = await geocodeAddress(newVehicle.location, mapboxToken)
-        if (!coords) {
-          throw new Error('Could not find location coordinates')
-        }
-        lat = coords.lat
-        lng = coords.lng
-        console.log('🚛 AddVehicleTab: Geocoded coordinates:', { lat, lng })
+      // Require lat/lng to be provided by location picker only
+      if (!newVehicle.lat || !newVehicle.lng) {
+        throw new Error('Please select a location on the map to provide coordinates')
       }
-
       const vehicleData = {
         vehicle_id: newVehicle.vehicle_id,
         driver: newVehicle.driver,
         location: newVehicle.location,
-        lat,
-        lng,
+        lat: newVehicle.lat,
+        lng: newVehicle.lng,
         status: 'idle' as const,
         speed: 0
       }
-      
       console.log('🚛 AddVehicleTab: Adding vehicle with data:', vehicleData)
-
       const result = await addVehicle(vehicleData)
-      
       console.log('🚛 AddVehicleTab: addVehicle result:', result)
-
       if (result) {
         toast({
           title: "Vehicle Added Successfully",

@@ -1,10 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 
 // Supabase configuration
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'your-supabase-url'
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-supabase-anon-key'
+const supabaseUrl = 'https://ncfqkcybnfncsklfdevj.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jZnFrY3libmZuY3NrbGZkZXZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyODAxMDgsImV4cCI6MjA3NDg1NjEwOH0.DY2U6yEGxPG0fy9NPYuZc84kqer6GjgWYX7lPKo6rdg';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Types for our database
 export interface Vehicle {
@@ -56,6 +56,6 @@ export interface DeliveryRoute {
 // Database table names
 export const TABLES = {
   VEHICLES: 'vehicles',
-  PACKAGES: 'packages', 
-  ROUTES: 'delivery_routes'
+  PACKAGES: 'packages',
+  ROUTES: 'routes'
 } as const

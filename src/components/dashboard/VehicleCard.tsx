@@ -21,6 +21,7 @@ interface VehicleCardProps {
   };
   onVehicleUpdate?: () => void;
   onViewDetails?: (vehicle: VehicleCardProps['vehicle']) => void;
+  onStartSimulation?: (vehicle: VehicleCardProps['vehicle']) => void;
 }
 
 const statusConfig = {
@@ -45,6 +46,7 @@ const statusConfig = {
 export function VehicleCard({ vehicle, onVehicleUpdate, onViewDetails }: VehicleCardProps) {
   const status = statusConfig[vehicle.status];
   const { toast } = useToast();
+  // ...existing code...
   
   const handleStatusUpdate = async (newStatus: typeof vehicle.status) => {
     try {
@@ -173,10 +175,19 @@ export function VehicleCard({ vehicle, onVehicleUpdate, onViewDetails }: Vehicle
               }}
               variant="outline" 
               size="sm" 
-              className="w-full"
+              className="w-full mb-2"
             >
               <Eye className="h-4 w-4 mr-2" />
               View Details
+            </Button>
+            <Button
+              onClick={() => onStartSimulation?.(vehicle)}
+              variant="default"
+              size="sm"
+              className="w-full"
+            >
+              <Truck className="h-4 w-4 mr-2" />
+              Start Delivery
             </Button>
           </div>
         </div>
