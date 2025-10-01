@@ -130,33 +130,33 @@ export function AddPackageTab({ mapboxToken, vehicles, onPackageAdded, onMapPick
 
   return (
     <>
-      <div className="bg-white/50 backdrop-blur-xl rounded-xl border border-white/50 shadow-lg">
-        <div className="p-4 border-b border-white/30">
-          <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+      <div className="bg-white/50 backdrop-blur-xl rounded-xl border border-white/50 shadow-lg max-h-[calc(100vh-120px)] overflow-y-auto">
+        <div className="p-3 border-b border-white/30">
+          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
             📦 Add Package
           </h3>
-          <p className="text-slate-600 text-sm mt-1">
+          <p className="text-slate-600 text-xs mt-1">
             Assign a new package to a vehicle for delivery
           </p>
         </div>
-        <div className="p-4">
-          <form onSubmit={handleAddPackage} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="package-id" className="text-slate-700 font-medium">Package ID</Label>
+        <div className="p-3">
+          <form onSubmit={handleAddPackage} className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor="package-id" className="text-slate-700 font-medium text-sm">Package ID</Label>
             <Input
               id="package-id"
               placeholder="e.g., PKG-001"
               value={newPackage.package_id}
               onChange={(e) => setNewPackage(prev => ({ ...prev, package_id: e.target.value }))}
               required
-              className="bg-white/80 border-white/50"
+              className="bg-white/80 border-white/50 h-8 text-sm"
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="vehicle-select" className="text-slate-700 font-medium">Assign to Vehicle</Label>
+          <div className="space-y-1">
+            <Label htmlFor="vehicle-select" className="text-slate-700 font-medium text-sm">Assign to Vehicle</Label>
             <Select value={newPackage.vehicle_id} onValueChange={(value) => setNewPackage(prev => ({ ...prev, vehicle_id: value }))}>
-              <SelectTrigger>
+              <SelectTrigger className="h-8">
                 <SelectValue placeholder="Select a vehicle" />
               </SelectTrigger>
               <SelectContent>
@@ -169,12 +169,12 @@ export function AddPackageTab({ mapboxToken, vehicles, onPackageAdded, onMapPick
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="destination" className="text-slate-700 font-medium">Delivery Destination</Label>
-            <div className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor="destination" className="text-slate-700 font-medium text-sm">Delivery Destination</Label>
+            <div className="space-y-2">
               <LocationFinder
                 mapboxToken={mapboxToken}
-                placeholder="Enter USA delivery address (e.g., 456 Oak Ave, Austin TX)"
+                placeholder="Enter USA delivery address"
                 onLocationSelect={handleLocationSelect}
                 value={newPackage.destination}
               />
@@ -186,18 +186,19 @@ export function AddPackageTab({ mapboxToken, vehicles, onPackageAdded, onMapPick
               <Button
                 type="button"
                 variant="outline"
+                size="sm"
                 onClick={handleMapPickerClick}
-                className="w-full flex items-center gap-2"
+                className="w-full flex items-center gap-2 h-8"
               >
-                <Target className="h-4 w-4" />
-                Pick delivery location on map
+                <Target className="h-3 w-3" />
+                Pick on map
               </Button>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="weight" className="text-slate-700 font-medium">Weight (lbs)</Label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="weight" className="text-slate-700 font-medium text-sm">Weight (lbs)</Label>
               <Input
                 id="weight"
                 type="number"
@@ -206,14 +207,14 @@ export function AddPackageTab({ mapboxToken, vehicles, onPackageAdded, onMapPick
                 value={newPackage.weight}
                 onChange={(e) => setNewPackage(prev => ({ ...prev, weight: parseFloat(e.target.value) || 0 }))}
                 required
-                className="bg-white/80 border-white/50"
+                className="bg-white/80 border-white/50 h-8 text-sm"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="priority" className="text-slate-700 font-medium">Priority</Label>
+            <div className="space-y-1">
+              <Label htmlFor="priority" className="text-slate-700 font-medium text-sm">Priority</Label>
               <Select value={newPackage.priority} onValueChange={(value: 'low' | 'medium' | 'high') => setNewPackage(prev => ({ ...prev, priority: value }))}>
-                <SelectTrigger>
+                <SelectTrigger className="h-8">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -225,31 +226,32 @@ export function AddPackageTab({ mapboxToken, vehicles, onPackageAdded, onMapPick
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="recipient" className="text-slate-700 font-medium">Recipient Name</Label>
+          <div className="space-y-1">
+            <Label htmlFor="recipient" className="text-slate-700 font-medium text-sm">Recipient Name</Label>
             <Input
               id="recipient"
               placeholder="e.g., John Doe"
               value={newPackage.recipient_name}
               onChange={(e) => setNewPackage(prev => ({ ...prev, recipient_name: e.target.value }))}
               required
-              className="bg-white/80 border-white/50"
+              className="bg-white/80 border-white/50 h-8 text-sm"
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="package-type" className="text-slate-700 font-medium">Package Type (Optional)</Label>
+          <div className="space-y-1">
+            <Label htmlFor="package-type" className="text-slate-700 font-medium text-sm">Package Type (Optional)</Label>
             <Input
               id="package-type"
-              placeholder="e.g., Electronics, Documents, Food"
+              placeholder="e.g., Electronics, Documents"
               value={newPackage.package_type}
               onChange={(e) => setNewPackage(prev => ({ ...prev, package_type: e.target.value }))}
-              className="bg-white/80 border-white/50"
+              className="bg-white/80 border-white/50 h-8 text-sm"
             />
           </div>
 
           <Button 
             type="submit" 
+            size="sm"
             className="w-full" 
             disabled={loading || vehicles.length === 0}
           >
