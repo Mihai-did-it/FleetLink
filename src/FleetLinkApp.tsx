@@ -1950,9 +1950,9 @@ export default function FleetLinkApp() {
                       {vehicles.map((vehicle) => (
                         <div
                           key={`${vehicle.vehicle_id}-${simulationUpdateCounter}`}
-                          className={`backdrop-blur-xl rounded-xl p-4 border cursor-pointer transition-all hover:shadow-xl ${
+                          className={`backdrop-blur-xl rounded-xl p-4 border cursor-pointer transition-all hover:shadow-xl relative overflow-visible ${
                             vehicle.packages.length > 0 && vehicle.packages.every(pkg => pkg.status === 'delivered')
-                              ? 'bg-green-50/80 border-green-300/60 hover:bg-green-100/80'
+                              ? 'bg-gradient-to-r from-green-100/95 to-emerald-100/95 border-green-400/90 hover:bg-gradient-to-r hover:from-green-200/95 hover:to-emerald-200/95 shadow-xl shadow-green-500/30 ring-2 ring-green-400/50 animate-pulse'
                               : 'bg-white/50 border-white/50 hover:bg-white/70'
                           } ${
                             selectedVehicle?.vehicle_id === vehicle.vehicle_id
@@ -1964,15 +1964,29 @@ export default function FleetLinkApp() {
                             setShowVehicleDrawer(true);
                           }}
                         >
-                          <div className="flex justify-between items-start mb-3">
+                          {/* Completion Banner for Completed Vehicles */}
+                          {vehicle.packages.length > 0 && vehicle.packages.every(pkg => pkg.status === 'delivered') && (
+                            <div className="absolute -top-2 left-2 right-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-bold py-1 px-3 rounded-full shadow-lg flex items-center justify-center space-x-1 animate-pulse">
+                              <span>🎉</span>
+                              <span>ALL DELIVERIES COMPLETE</span>
+                              <span>🎉</span>
+                            </div>
+                          )}
+                          
+                          <div className={`${vehicle.packages.length > 0 && vehicle.packages.every(pkg => pkg.status === 'delivered') ? 'mt-4' : ''}`}>
+                            <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <div className="font-bold text-slate-800 text-base">{vehicle.vehicle_id}</div>
+                                <div className="text-sm text-slate-600 font-medium">{vehicle.driver}</div>
+                              </div>
                             <div>
                               <div className="font-bold text-slate-800 text-base">{vehicle.vehicle_id}</div>
                               <div className="text-sm text-slate-600 font-medium">{vehicle.driver}</div>
                             </div>
                             <div className="flex items-center space-x-2">
                               {vehicle.packages.length > 0 && vehicle.packages.every(pkg => pkg.status === 'delivered') && (
-                                <div className="px-2 py-1 rounded-lg border bg-green-100 border-green-300 text-xs font-bold text-green-800">
-                                  ✅ Complete
+                                <div className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-bold shadow-lg animate-pulse">
+                                  ✅ COMPLETE
                                 </div>
                               )}
                               <div className={`px-2 py-1 rounded-lg border text-xs font-medium ${getStatusBg(vehicle.status)}`}>
@@ -2099,6 +2113,7 @@ export default function FleetLinkApp() {
                               </div>
                             )}
                           </div>
+                        </div>
                         </div>
                       ))}
                     </div>
