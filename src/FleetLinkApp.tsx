@@ -1986,16 +1986,16 @@ export default function FleetLinkApp() {
                             setShowVehicleDrawer(true);
                           }}
                         >
-                          {/* Completion Banner for Completed Vehicles */}
-                          {isVehicleCompleted(vehicle) && (
-                            <div className="absolute -top-2 left-2 right-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-bold py-1 px-3 rounded-full shadow-lg flex items-center justify-center space-x-1 animate-pulse">
-                              <span>🎉</span>
-                              <span>ALL DELIVERIES COMPLETE</span>
-                              <span>🎉</span>
-                            </div>
-                          )}
-                          
-                          <div className={`${isVehicleCompleted(vehicle) ? 'mt-4' : ''}`}>
+                          <div className="relative">
+                            {/* Completion Banner for Completed Vehicles */}
+                            {isVehicleCompleted(vehicle) && (
+                              <div className="mb-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-bold py-2 px-3 rounded-lg shadow-lg flex items-center justify-center space-x-1 animate-pulse">
+                                <span>🎉</span>
+                                <span>ALL DELIVERIES COMPLETE</span>
+                                <span>🎉</span>
+                              </div>
+                            )}
+                            
                             <div className="flex justify-between items-start mb-3">
                               <div>
                                 <div className="font-bold text-slate-800 text-base">{vehicle.vehicle_id}</div>
@@ -2007,9 +2007,6 @@ export default function FleetLinkApp() {
                                     ✅ COMPLETE
                                   </div>
                                 )}
-                                <div className={`px-2 py-1 rounded-lg border text-xs font-medium ${getStatusBg(vehicle.status)}`}>
-                                  <span className={getStatusColor(vehicle.status)}>{vehicle.status}</span>
-                                </div>
                               </div>
                             </div>
 
