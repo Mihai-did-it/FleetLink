@@ -1759,8 +1759,6 @@ export default function FleetLinkApp() {
                     className={`px-5 py-2.5 text-sm font-semibold rounded-xl transition-all backdrop-blur-sm border-2 ${
                       activeSection === section
                         ? 'bg-blue-600/90 text-white shadow-xl shadow-blue-500/30 border-blue-400/50 ring-2 ring-blue-400/20'
-                        : section === 'fleet'
-                        ? 'text-white/90 hover:bg-white/20 hover:text-white border-white/30 hover:border-white/50 bg-white/10'
                         : 'text-white/90 hover:bg-blue-500/30 hover:text-white border-blue-400/20 hover:border-blue-400/40 bg-blue-500/15'
                     }`}
                   >
@@ -1885,8 +1883,7 @@ export default function FleetLinkApp() {
 
       {/* Main Content Panel */}
       <div className={`absolute top-24 left-6 transition-all duration-500 ease-out ${
-        isFleetPanelCollapsed ? 'w-16' : 
-        (activeSection === 'add-vehicle' || activeSection === 'add-packages') ? 'w-96' : 'w-80'
+        isFleetPanelCollapsed ? 'w-16' : 'w-96'
       }`}>
         <div className="bg-white/20 backdrop-blur-3xl border border-white/30 rounded-2xl shadow-2xl shadow-black/20 h-[calc(100vh-8rem)]">
           {/* Collapse Button */}
