@@ -73,6 +73,7 @@ export default function FleetLinkApp() {
   const [simulationStates, setSimulationStates] = useState<Map<string, any>>(new Map());
   const [simulationUpdateCounter, setSimulationUpdateCounter] = useState(0);
   const [dismissedSuccessBanner, setDismissedSuccessBanner] = useState(false);
+  const [completedVehicles, setCompletedVehicles] = useState<Set<string>>(new Set());
   
   // Toast notifications
   const { toast } = useToast();
@@ -593,6 +594,9 @@ export default function FleetLinkApp() {
         // Check if complete
         if (deliveryResult.isComplete || newProgress >= 1) {
           console.log(`🏁 Route complete for ${vehicleId}`);
+          
+          // Mark vehicle as completed
+          setCompletedVehicles(prev => new Set(prev).add(vehicleId));
           
           newState.isActive = false;
           newState.currentSpeed = 0;
@@ -1520,6 +1524,27 @@ export default function FleetLinkApp() {
     }
   }, [simulationStates, dismissedSuccessBanner]);
 
+  // Helper function to check if vehicle has completed all deliveries
+  const isVehicleCompleted = (vehicle: VehicleWithPackages): boolean => {
+    // Check if vehicle is in completed vehicles set
+    if (completedVehicles.has(vehicle.vehicle_id)) {
+      return true;
+    }
+    
+    // Check if all packages are marked as delivered in the database
+    const allPackagesDelivered = vehicle.packages.length > 0 && vehicle.packages.every(pkg => pkg.status === 'delivered');
+    
+    // Also check if simulation has completed and all packages were delivered
+    const simulationState = simulationStates.get(vehicle.vehicle_id);
+    const simulationCompleted = simulationState && 
+      !simulationState.isActive && 
+      simulationState.deliveredPackages &&
+      vehicle.packages.length > 0 &&
+      simulationState.deliveredPackages.length === vehicle.packages.length;
+    
+    return allPackagesDelivered || simulationCompleted;
+  };
+
   // Clear failed vehicles
   const clearFailedVehicles = () => {
     console.log('🧹 Clearing failed vehicles list');
@@ -1894,10 +1919,7 @@ export default function FleetLinkApp() {
                   </div>
                   
                   {/* Success Banner for Completed Vehicles */}
-                  {!dismissedSuccessBanner && vehicles.some(vehicle => 
-                    vehicle.packages.length > 0 && 
-                    vehicle.packages.every(pkg => pkg.status === 'delivered')
-                  ) && (
+                  {!dismissedSuccessBanner && vehicles.some(vehicle => isVehicleCompleted(vehicle)) && (
                     <div className="mb-4 animate-in slide-in-from-top duration-500">
                       <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 backdrop-blur-xl rounded-xl p-4 border border-green-400/40 shadow-lg relative overflow-hidden">
                         <div className="absolute inset-0 bg-gradient-to-r from-green-400/5 to-emerald-400/5 animate-pulse"></div>
@@ -1907,8 +1929,8 @@ export default function FleetLinkApp() {
                             <div>
                               <h4 className="text-green-100 font-bold text-sm">Delivery Success!</h4>
                               <p className="text-green-200/80 text-xs">
-                                {vehicles.filter(v => v.packages.length > 0 && v.packages.every(pkg => pkg.status === 'delivered')).length} 
-                                {vehicles.filter(v => v.packages.length > 0 && v.packages.every(pkg => pkg.status === 'delivered')).length === 1 ? ' vehicle has' : ' vehicles have'} completed all deliveries
+                                {vehicles.filter(v => isVehicleCompleted(v)).length} 
+                                {vehicles.filter(v => isVehicleCompleted(v)).length === 1 ? ' vehicle has' : ' vehicles have'} completed all deliveries
                               </p>
                             </div>
                           </div>
@@ -1951,7 +1973,7 @@ export default function FleetLinkApp() {
                         <div
                           key={`${vehicle.vehicle_id}-${simulationUpdateCounter}`}
                           className={`backdrop-blur-xl rounded-xl p-4 border cursor-pointer transition-all hover:shadow-xl relative overflow-visible ${
-                            vehicle.packages.length > 0 && vehicle.packages.every(pkg => pkg.status === 'delivered')
+                            isVehicleCompleted(vehicle)
                               ? 'bg-gradient-to-r from-green-100/95 to-emerald-100/95 border-green-400/90 hover:bg-gradient-to-r hover:from-green-200/95 hover:to-emerald-200/95 shadow-xl shadow-green-500/30 ring-2 ring-green-400/50 animate-pulse'
                               : 'bg-white/50 border-white/50 hover:bg-white/70'
                           } ${
@@ -1965,7 +1987,7 @@ export default function FleetLinkApp() {
                           }}
                         >
                           {/* Completion Banner for Completed Vehicles */}
-                          {vehicle.packages.length > 0 && vehicle.packages.every(pkg => pkg.status === 'delivered') && (
+                          {isVehicleCompleted(vehicle) && (
                             <div className="absolute -top-2 left-2 right-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-bold py-1 px-3 rounded-full shadow-lg flex items-center justify-center space-x-1 animate-pulse">
                               <span>🎉</span>
                               <span>ALL DELIVERIES COMPLETE</span>
@@ -1973,27 +1995,23 @@ export default function FleetLinkApp() {
                             </div>
                           )}
                           
-                          <div className={`${vehicle.packages.length > 0 && vehicle.packages.every(pkg => pkg.status === 'delivered') ? 'mt-4' : ''}`}>
+                          <div className={`${isVehicleCompleted(vehicle) ? 'mt-4' : ''}`}>
                             <div className="flex justify-between items-start mb-3">
                               <div>
                                 <div className="font-bold text-slate-800 text-base">{vehicle.vehicle_id}</div>
                                 <div className="text-sm text-slate-600 font-medium">{vehicle.driver}</div>
                               </div>
-                            <div>
-                              <div className="font-bold text-slate-800 text-base">{vehicle.vehicle_id}</div>
-                              <div className="text-sm text-slate-600 font-medium">{vehicle.driver}</div>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              {vehicle.packages.length > 0 && vehicle.packages.every(pkg => pkg.status === 'delivered') && (
-                                <div className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-bold shadow-lg animate-pulse">
-                                  ✅ COMPLETE
+                              <div className="flex items-center space-x-2">
+                                {isVehicleCompleted(vehicle) && (
+                                  <div className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-bold shadow-lg animate-pulse">
+                                    ✅ COMPLETE
+                                  </div>
+                                )}
+                                <div className={`px-2 py-1 rounded-lg border text-xs font-medium ${getStatusBg(vehicle.status)}`}>
+                                  <span className={getStatusColor(vehicle.status)}>{vehicle.status}</span>
                                 </div>
-                              )}
-                              <div className={`px-2 py-1 rounded-lg border text-xs font-medium ${getStatusBg(vehicle.status)}`}>
-                                <span className={getStatusColor(vehicle.status)}>{vehicle.status}</span>
                               </div>
                             </div>
-                          </div>
 
                           <div className="space-y-2 text-sm">
                             <div className="flex justify-between">
@@ -2055,7 +2073,7 @@ export default function FleetLinkApp() {
                             )}
                             
                             {/* Show completion summary for completed vehicles */}
-                            {vehicle.packages.length > 0 && vehicle.packages.every(pkg => pkg.status === 'delivered') && (
+                            {isVehicleCompleted(vehicle) && (
                               <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
                                 <div className="flex items-center space-x-2 mb-2">
                                   <span className="text-green-600 font-bold text-sm">🎯 Mission Complete</span>
