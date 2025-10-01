@@ -143,7 +143,7 @@ export default function FleetLinkApp() {
             type: 'geojson',
             data: {
               type: 'Feature',
-              properties: { speed: '0 km/h' },
+              properties: { speed: '0 mph' },
               geometry: {
                 type: 'Point',
                 coordinates: [vehicle.lng || 0, vehicle.lat || 0]
@@ -559,8 +559,9 @@ export default function FleetLinkApp() {
         const currentRealisticSpeed = getRealisticSpeed(vehicleState.routeProgress, baseSpeed);
         
         // Convert mph to km/s for distance calculation
-        const speedKmH = currentRealisticSpeed * 1.60934;
-        const distancePerSecond = speedKmH / 3600;
+  // Use mph directly for distance calculation (1 mile = 1609.34 meters)
+  // Use mph directly for distance calculation (miles per hour to miles per second)
+  const distancePerSecond = currentRealisticSpeed / 3600;
         
         // Calculate new position
         const totalDistance = calculateRouteDistance(routeCoordinates);
@@ -663,7 +664,7 @@ export default function FleetLinkApp() {
   
   // Helper function to calculate distance between two coordinates (Haversine formula)
   const calculateDistanceToDestination = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
-    const R = 6371; // Earth's radius in kilometers
+  const R = 3958.8; // Earth's radius in miles
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLng = (lng2 - lng1) * Math.PI / 180;
     const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
@@ -707,7 +708,7 @@ export default function FleetLinkApp() {
     }
     
     const deliveredPackages: string[] = [];
-    const DELIVERY_RADIUS_KM = 0.1; // 100 meters - more realistic for delivery range
+  const DELIVERY_RADIUS_MI = 0.0621; // 100 meters in miles
     
     console.log(`🚚 DELIVERY CHECK - Vehicle ${vehicle.vehicle_id}:`, {
       progress: progress.toFixed(3),
@@ -715,7 +716,7 @@ export default function FleetLinkApp() {
       currentPosition: [currentPosition[1].toFixed(6), currentPosition[0].toFixed(6)], // [lat, lng]
       totalPackages: vehicle.packages.length,
       validPackages: validPackages.length,
-      deliveryRadius: `${DELIVERY_RADIUS_KM * 1000}m`,
+  deliveryRadius: `${DELIVERY_RADIUS_MI * 1609.34}m`,
       previouslyDelivered: previouslyDelivered.length
     });
     
@@ -732,13 +733,13 @@ export default function FleetLinkApp() {
         pkg.destination_lat!, pkg.destination_lng! // package destination lat, lng (validated above)
       );
       
-      const withinRadius = distance <= DELIVERY_RADIUS_KM;
+  const withinRadius = distance <= DELIVERY_RADIUS_MI;
       const progressOk = progress > 0.15; // 15% minimum progress
       
       console.log(`📍 Package ${pkg.package_id}:`, {
         destination: pkg.destination,
         coordinates: [pkg.destination_lat, pkg.destination_lng],
-        distanceKm: distance.toFixed(4),
+  distanceMi: distance.toFixed(4),
         distanceMeters: Math.round(distance * 1000),
         withinRadius,
         progressOk,
@@ -785,7 +786,7 @@ export default function FleetLinkApp() {
     if (validPackages.length === 0) return [];
     
     const deliveredPackages: string[] = [];
-    const FINAL_DELIVERY_RADIUS_KM = 0.15; // 150 meters - more lenient for route completion
+  const FINAL_DELIVERY_RADIUS_MI = 0.0932; // 150 meters in miles
     
     console.log(`🏁 FINAL DELIVERY CHECK at route completion - Vehicle ${vehicle.vehicle_id}`);
     
@@ -800,11 +801,11 @@ export default function FleetLinkApp() {
       console.log(`📍 FINAL CHECK Package ${pkg.package_id}:`, {
         destination: pkg.destination,
         distanceMeters: Math.round(distance * 1000),
-        withinFinalRadius: distance <= FINAL_DELIVERY_RADIUS_KM,
-        finalRadiusM: FINAL_DELIVERY_RADIUS_KM * 1000
+  withinFinalRadius: distance <= FINAL_DELIVERY_RADIUS_MI,
+  finalRadiusM: FINAL_DELIVERY_RADIUS_MI * 1609.34
       });
       
-      if (distance <= FINAL_DELIVERY_RADIUS_KM) {
+  if (distance <= FINAL_DELIVERY_RADIUS_MI) {
         deliveredPackages.push(pkg.package_id);
         console.log(`📦 🎯 FINAL DELIVERY: Package ${pkg.package_id} - ${Math.round(distance * 1000)}m (route completion)`);
         
@@ -961,7 +962,7 @@ export default function FleetLinkApp() {
               Math.sin(dLng/2) * Math.sin(dLng/2);
     
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c; // Distance in kilometers
+  return R * c; // Distance in miles
   };
 
   const interpolatePosition = (coordinates: [number, number][], progress: number): [number, number] => {
@@ -2010,11 +2011,15 @@ export default function FleetLinkApp() {
                               </div>
                             </div>
 
-                          <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-slate-600 font-medium">Speed:</span>
-                              <span className="text-slate-800 font-bold">{vehicle.speed} mph</span>
-                            </div>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between">
+                                <span className="text-slate-600 font-medium">Speed:</span>
+                                <span className="text-slate-800 font-bold">
+                                  {simulationStates.get(vehicle.vehicle_id)?.currentSpeed
+                                    ? simulationStates.get(vehicle.vehicle_id).currentSpeed.toFixed(1)
+                                    : vehicle.speed} mph
+                                </span>
+                              </div>
                             <div className="flex justify-between">
                               <span className="text-slate-600 font-medium">Packages:</span>
                               <span className="text-slate-800 font-bold">{vehicle.packages.length}</span>
