@@ -19,6 +19,7 @@ export interface Vehicle {
   next_stop?: string
   eta?: string
   progress?: number
+  user_id: string
   created_at?: string
   updated_at?: string
 }
@@ -37,6 +38,7 @@ export interface Package {
   package_type?: string
   estimated_delivery_time?: string
   actual_delivery_time?: string
+  user_id: string
   created_at?: string
   updated_at?: string
 }
@@ -49,6 +51,7 @@ export interface DeliveryRoute {
   total_duration: number
   waypoints: any[] // Array of waypoint objects
   is_optimized: boolean
+  user_id: string
   created_at?: string
   updated_at?: string
 }

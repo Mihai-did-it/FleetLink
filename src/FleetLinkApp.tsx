@@ -15,6 +15,7 @@ import {
   type Vehicle,
   type Package
 } from './lib/local-api'
+import { useAuth } from './components/auth/AuthProvider'
 import { 
   createDeliveryRoute, 
   formatDuration, 
@@ -58,6 +59,7 @@ interface LocationSuggestion {
 }
 
 export default function FleetLinkApp() {
+  const { signOut, user } = useAuth()
   const [vehicles, setVehicles] = useState<VehicleWithPackages[]>([]);
   const [allPackages, setAllPackages] = useState<Package[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleWithPackages | null>(null);
@@ -1744,9 +1746,13 @@ export default function FleetLinkApp() {
                 <div className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                   FleetLink Pro
                 </div>
-                <div className="flex items-center space-x-1">
-                  <div className={`w-2 h-2 rounded-full animate-pulse ${isConnected ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
-                  <span className="text-sm text-slate-600">{isConnected ? 'Supabase Connected' : 'Disconnected'}</span>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={signOut}
+                    className="px-3 py-1 text-xs bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition-colors"
+                  >
+                    Sign Out
+                  </button>
                 </div>
               </div>
 
@@ -2455,18 +2461,7 @@ export default function FleetLinkApp() {
         </>
       )}
       
-      {/* Local Testing Indicator */}
-      <div className="fixed bottom-4 left-4 bg-green-500 text-white px-3 py-2 rounded-lg shadow-lg text-sm font-medium z-50">
-        🧪 Local Testing Mode
-      </div>
 
-      {/* Debug Info */}
-      <div className="fixed bottom-4 right-4 bg-blue-500 text-white px-3 py-2 rounded-lg shadow-lg text-xs z-50 max-w-xs">
-        <div>Vehicles: {vehicles.length}</div>
-        <div>With Packages: {vehicles.filter(v => v.packages.length > 0).length}</div>
-        <div>With Routes: {vehicles.filter(v => v.deliveryRoute).length}</div>
-        <div>MapBox Token: {mapboxToken ? '✅' : '❌'}</div>
-      </div>
       
       {/* Toast notifications */}
       <Toaster />

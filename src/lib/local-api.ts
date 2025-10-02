@@ -32,6 +32,11 @@ export async function addVehicle(vehicleData: {
   speed?: number
 }): Promise<Vehicle | null> {
   const id = generateUUID();
+  
+  // Get current user ID
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('User not authenticated');
+  
   const { data, error } = await supabase.from(TABLES.VEHICLES).insert([
     {
       id,
@@ -42,7 +47,8 @@ export async function addVehicle(vehicleData: {
       location: vehicleData.location,
       status: vehicleData.status || 'idle',
       speed: vehicleData.speed || 0,
-      progress: 0
+      progress: 0,
+      user_id: user.id
     }
   ]).select();
   if (error) throw error;
@@ -94,6 +100,11 @@ export async function addPackage(packageData: {
   package_type?: string
 }): Promise<Package | null> {
   const id = generateUUID();
+  
+  // Get current user ID
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('User not authenticated');
+  
   const { data, error } = await supabase.from(TABLES.PACKAGES).insert([
     {
       id,
@@ -106,7 +117,8 @@ export async function addPackage(packageData: {
       status: 'pending',
       priority: packageData.priority || 'medium',
       recipient_name: packageData.recipient_name,
-      package_type: packageData.package_type
+      package_type: packageData.package_type,
+      user_id: user.id
     }
   ]).select();
   if (error) throw error;
@@ -144,8 +156,13 @@ export async function saveDeliveryRoute(routeData: {
   waypoints: any[]
 }): Promise<DeliveryRoute | null> {
   const id = generateUUID();
-  // Remove existing route for this vehicle
-  await supabase.from(TABLES.ROUTES).delete().eq('vehicle_id', routeData.vehicle_id);
+  
+  // Get current user ID
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('User not authenticated');
+  
+  // Remove existing route for this vehicle (for this user)
+  await supabase.from(TABLES.ROUTES).delete().eq('vehicle_id', routeData.vehicle_id).eq('user_id', user.id);
   const { data, error } = await supabase.from(TABLES.ROUTES).insert([
     {
       id,
@@ -154,7 +171,8 @@ export async function saveDeliveryRoute(routeData: {
       total_distance: routeData.total_distance,
       total_duration: routeData.total_duration,
       waypoints: routeData.waypoints,
-      is_optimized: true
+      is_optimized: true,
+      user_id: user.id
     }
   ]).select();
   if (error) throw error;
