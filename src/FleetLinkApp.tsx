@@ -32,6 +32,7 @@ import { QuickAddPackageModal } from './components/modals/QuickAddPackageModal'
 import { useToast } from '@/hooks/use-toast'
 import { DeliveryOrchestrator } from './systems/DeliveryOrchestrator'
 import { Toaster } from '@/components/ui/toaster'
+import InteractiveTutorial from './components/common/InteractiveTutorial'
 
 // Types
 interface NewVehicle {
@@ -109,6 +110,10 @@ export default function FleetLinkApp() {
   const [showQuickAddPackageModal, setShowQuickAddPackageModal] = useState(false);
   const [quickAddSelectedLocation, setQuickAddSelectedLocation] = useState<{ address: string; lat: number; lng: number } | null>(null);
   
+  // Tutorial state
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialCompleted, setTutorialCompleted] = useState(false);
+  
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<{ [key: string]: mapboxgl.Marker }>({});
@@ -120,6 +125,40 @@ export default function FleetLinkApp() {
   if (!mapboxToken) {
     console.error('Missing VITE_MAPBOX_TOKEN environment variable');
   }
+  
+  // Check if user has seen tutorial before
+  useEffect(() => {
+    const hasSeenTutorial = localStorage.getItem('fleetlink_tutorial_completed');
+    if (!hasSeenTutorial) {
+      // Show tutorial after a short delay to let the UI load
+      const timer = setTimeout(() => {
+        setShowTutorial(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else {
+      setTutorialCompleted(true);
+    }
+  }, []);
+  
+  const handleTutorialComplete = () => {
+    setShowTutorial(false);
+    setTutorialCompleted(true);
+    localStorage.setItem('fleetlink_tutorial_completed', 'true');
+    toast({
+      title: "Tutorial Complete! 🎉",
+      description: "You're ready to start managing your fleet!",
+    });
+  };
+  
+  const handleTutorialSkip = () => {
+    setShowTutorial(false);
+    setTutorialCompleted(true);
+    localStorage.setItem('fleetlink_tutorial_completed', 'true');
+  };
+  
+  const restartTutorial = () => {
+    setShowTutorial(true);
+  };
 
   // Initialize Mapbox
   useEffect(() => {
@@ -1752,6 +1791,14 @@ export default function FleetLinkApp() {
                 </div>
                 <div className="flex items-center space-x-2">
                   <button
+                    onClick={restartTutorial}
+                    className="px-3 py-1 text-xs bg-blue-500/80 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-1"
+                    title="Show tutorial"
+                  >
+                    <span>?</span>
+                    <span>Help</span>
+                  </button>
+                  <button
                     onClick={signOut}
                     className="px-3 py-1 text-xs bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition-colors"
                   >
@@ -1766,6 +1813,7 @@ export default function FleetLinkApp() {
                   <button
                     key={section}
                     onClick={() => setActiveSection(section as any)}
+                    data-tutorial={section === 'add-vehicle' ? 'add-vehicle' : undefined}
                     className={`px-5 py-2.5 text-sm font-semibold rounded-xl transition-all backdrop-blur-sm border-2 ${
                       activeSection === section
                         ? 'bg-blue-600/90 text-white shadow-xl shadow-blue-500/30 border-blue-400/50 ring-2 ring-blue-400/20'
@@ -1830,6 +1878,7 @@ export default function FleetLinkApp() {
                     )}
                     className="px-4 py-2.5 text-xs font-bold rounded-xl bg-blue-600/60 text-blue-50 hover:bg-blue-600/80 transition-all flex items-center gap-2 shadow-xl border border-blue-400/40 backdrop-blur-sm ring-1 ring-blue-400/20"
                     title="Click map to add vehicle at that location"
+                    data-tutorial="quick-add"
                   >
                     <span className="text-base">🚛</span>
                     <span className="font-bold">Quick Add</span>
@@ -2411,8 +2460,9 @@ export default function FleetLinkApp() {
                   }}
                   disabled={selectedVehicle.packages.length === 0 || loading}
                   className="w-full px-4 py-3 bg-purple-500 hover:bg-purple-600 disabled:bg-slate-300 text-white rounded-lg transition-colors font-medium shadow-lg"
+                  data-tutorial="generate-route"
                 >
-                  {loading ? '� Generating...' : '�🗺️ Generate Route'}
+                  {loading ? '⏳ Generating...' : '🗺️ Generate Route'}
                 </button>
                 
                 {selectedVehicle.packages.length === 0 && (
@@ -2465,7 +2515,13 @@ export default function FleetLinkApp() {
         </>
       )}
       
-
+      {/* Interactive Tutorial */}
+      {showTutorial && (
+        <InteractiveTutorial
+          onComplete={handleTutorialComplete}
+          onSkip={handleTutorialSkip}
+        />
+      )}
       
       {/* Toast notifications */}
       <Toaster />
