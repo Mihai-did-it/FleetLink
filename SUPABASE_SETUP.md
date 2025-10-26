@@ -44,8 +44,8 @@ The schema includes:
 
 2. **Edit `.env` file** with your Supabase credentials:
    ```bash
-   # Mapbox Configuration (already set)
-   VITE_MAPBOX_TOKEN=pk.eyJ1IjoibW5pZmFpIiwiYSI6ImNtZjM5dng3dzAxZWYybHEwdmZ2MmE4MDkifQ.CGxxP82dHH4tu6V9D6FhHg
+   # Mapbox Configuration
+   VITE_MAPBOX_TOKEN=your_mapbox_token_here
 
    # Supabase Configuration - REPLACE WITH YOUR VALUES
    VITE_SUPABASE_URL=https://your-project-ref.supabase.co

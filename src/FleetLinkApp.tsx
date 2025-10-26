@@ -115,7 +115,11 @@ export default function FleetLinkApp() {
   const routeLayerIds = useRef<string[]>([]);
 
   // Configuration
-  const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN || 'pk.eyJ1IjoibW5pZmFpIiwiYSI6ImNtZjM5dng3dzAxZWYybHEwdmZ2MmE4MDkifQ.CGxxP82dHH4tu6V9D6FhHg';
+  const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN;
+
+  if (!mapboxToken) {
+    console.error('Missing VITE_MAPBOX_TOKEN environment variable');
+  }
 
   // Initialize Mapbox
   useEffect(() => {

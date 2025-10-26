@@ -44,7 +44,13 @@
     </div>
 
     <script>
-        const MAPBOX_TOKEN = 'pk.eyJ1IjoibW5pZmFpIiwiYSI6ImNtZjM5dng3dzAxZWYybHEwdmZ2MmE4MDkifQ.CGxxP82dHH4tu6V9D6FhHg';
+        // NOTE: Replace this with your actual Mapbox token
+        // Get it from: https://account.mapbox.com/access-tokens/
+        const MAPBOX_TOKEN = 'YOUR_MAPBOX_TOKEN_HERE';
+        
+        if (MAPBOX_TOKEN === 'YOUR_MAPBOX_TOKEN_HERE') {
+            alert('⚠️ Please set your Mapbox token in debug-page.html');
+        }
         
         function log(message) {
             const div = document.getElementById('api-results');
